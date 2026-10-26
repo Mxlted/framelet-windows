@@ -9,5 +9,6 @@
     <RepositoryUrl>https://github.com/Mxlted/framelet-windows</RepositoryUrl>
     <Deterministic>true</Deterministic>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <Platforms>x64</Platforms>
   </PropertyGroup>
 </Project>

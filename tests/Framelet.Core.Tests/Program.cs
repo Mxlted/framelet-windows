@@ -21,6 +21,8 @@ Check("Settings preserve independent audio devices", () => { var s = store.Load(
 Check("Malformed settings preserved and reported", () => { File.WriteAllText(settingsPath, "{broken"); var defaults = store.Load(); Require(!defaults.Recording.UseFfmpeg && store.LoadWarning is not null && File.ReadAllText(settingsPath) == "{broken"); });
 Check("Null settings do not crash startup", () => { File.WriteAllText(settingsPath, "null"); Require(store.Load() is not null && store.LoadWarning is not null); });
 Check("Invalid persisted values recover to defaults", () => { File.WriteAllText(settingsPath, "{\"Theme\":\"Invisible\"}"); Require(store.Load().Theme == "Dark"); });
+Check("Null nested preferences recover safely", () => { File.WriteAllText(settingsPath, "{\"RegionHotkey\":null,\"EditorColor\":null}"); Require(store.Load().RegionHotkey == "Ctrl+Shift+2" && store.LoadWarning is not null); });
+Check("Invalid editor width rejected", () => Reject(() => new AppSettings { EditorStroke = double.NaN }.Validate()));
 Check("Save failure preserves previous contents", () => { var s = new AppSettings(); store.Save(s); var before = File.ReadAllText(settingsPath); s.Recording.FrameRate = 900; Reject(() => store.Save(s)); Require(File.ReadAllText(settingsPath) == before); });
 Check("Settings drafts are independent", () => { var s = new AppSettings(); var copy = SettingsStore.Clone(s); copy.Recording.UseFfmpeg = true; Require(!s.Recording.UseFfmpeg); });
 Check("No temporary settings files remain", () => Require(Directory.GetFiles(testRoot, "*.tmp").Length == 0));

@@ -23,6 +23,12 @@ public sealed class AppSettings
 
     public void Validate()
     {
+        if (RegionHotkey is null || WindowHotkey is null || MonitorHotkey is null || RecordHotkey is null)
+            throw new ArgumentException("Hotkey values must be strings; use an empty string to disable one.");
+        if (EditorColor is null || !System.Text.RegularExpressions.Regex.IsMatch(EditorColor, "^#[0-9A-Fa-f]{6}$"))
+            throw new ArgumentException("The editor color must be a six-digit hex color.");
+        if (!double.IsFinite(EditorStroke) || EditorStroke is < 1 or > 64)
+            throw new ArgumentException("Editor stroke width must be between 1 and 64 pixels.");
         if (string.IsNullOrWhiteSpace(OutputDirectory) || !Path.IsPathFullyQualified(OutputDirectory))
             throw new ArgumentException("Choose an absolute output folder.");
         if (Theme is not ("Dark" or "Light" or "System")) throw new ArgumentException("Choose a valid theme.");

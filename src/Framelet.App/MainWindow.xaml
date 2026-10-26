@@ -1,0 +1,32 @@
+<Window x:Class="Framelet.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:editor="clr-namespace:Framelet.App.Editor" Title="Framelet" Width="1240" Height="820" MinWidth="1000" MinHeight="660" WindowStartupLocation="CenterScreen" AllowDrop="True" Drop="OnDrop" PreviewKeyDown="OnKeyDown">
+  <Window.Style><StaticResource ResourceKey="{x:Type Window}"/></Window.Style>
+  <Grid Background="{DynamicResource BackgroundBrush}">
+    <Grid.RowDefinitions><RowDefinition Height="58"/><RowDefinition/><RowDefinition Height="30"/></Grid.RowDefinitions>
+    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+      <Grid Margin="18,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Path Width="23" Height="23" Stretch="Uniform" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Data="M 0,8 L 0,0 8,0 M 14,0 L 22,0 22,8 M 22,14 L 22,22 14,22 M 8,22 L 0,22 0,14 M 6,6 L 16,6 16,16 6,16 Z"/><TextBlock Text="Framelet" FontSize="19" FontWeight="SemiBold" Margin="11,0,0,0"/></StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Button Content="Capture ▾" Click="CaptureMenu" Margin="0,0,7,0"/><Button Content="Record clip" Click="RecordClick" Margin="0,0,18,0"/><Button Content="Open image" Click="OpenClick" Background="Transparent" BorderThickness="0"/><Button Content="Paste" Click="PasteClick" Background="Transparent" BorderThickness="0"/></StackPanel>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"><Button x:Name="CopyButton" Content="Copy image" Click="CopyClick" IsEnabled="False" Margin="0,0,7,0"/><Button x:Name="SaveButton" Content="Save image" Click="SaveClick" IsEnabled="False" Background="{DynamicResource SelectionBrush}" BorderBrush="{DynamicResource AccentBrush}"/></StackPanel>
+      </Grid>
+    </Border>
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="68"/><ColumnDefinition/></Grid.ColumnDefinitions>
+      <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0"><DockPanel Margin="7,12"><Button DockPanel.Dock="Bottom" Content="⚙" FontSize="22" ToolTip="Settings" AutomationProperties.Name="Settings" Click="SettingsClick" Background="Transparent" BorderThickness="0" Padding="7"/><StackPanel><Button Content="⌂" FontSize="23" ToolTip="Home" AutomationProperties.Name="Home" Click="HomeClick" Background="Transparent" BorderThickness="0" Margin="0,0,0,10"/><Button Content="▧" FontSize="23" ToolTip="Image editor" AutomationProperties.Name="Image editor" Click="EditorClick" Background="Transparent" BorderThickness="0" Margin="0,0,0,10"/><Button Content="▷" FontSize="23" ToolTip="Clip preview and trim" AutomationProperties.Name="Clip preview and trim" Click="ClipsClick" Background="Transparent" BorderThickness="0"/></StackPanel></DockPanel></Border>
+      <Grid Grid.Column="1">
+        <ScrollViewer x:Name="HomeView" VerticalScrollBarVisibility="Auto"><Grid Margin="44,38" MaxWidth="970" HorizontalAlignment="Stretch"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+          <StackPanel><TextBlock Text="A clear shot. A quick edit." FontSize="30" FontWeight="SemiBold"/><TextBlock Text="Capture what matters, make it clear, and keep it local." Margin="0,9,0,26" Foreground="{DynamicResource MutedBrush}" FontSize="14"/></StackPanel>
+          <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions>
+            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="5" Background="{DynamicResource SurfaceBrush}" Padding="22"><StackPanel><TextBlock Text="SCREENSHOT" Foreground="{DynamicResource MutedBrush}" FontSize="11" FontWeight="SemiBold"/><TextBlock Text="Select. Annotate. Done." FontSize="19" FontWeight="SemiBold" Margin="0,10,0,18"/><Button Content="Capture a region" Click="RegionClick" HorizontalAlignment="Left" Background="{DynamicResource SelectionBrush}" BorderBrush="{DynamicResource AccentBrush}"/><TextBlock x:Name="CaptureHint" Text="Ctrl + Shift + 2" Foreground="{DynamicResource MutedBrush}" Margin="0,12,0,0"/></StackPanel></Border>
+            <Border Grid.Column="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="5" Background="{DynamicResource SurfaceBrush}" Padding="22"><StackPanel><TextBlock Text="VIDEO CLIP" Foreground="{DynamicResource MutedBrush}" FontSize="11" FontWeight="SemiBold"/><TextBlock Text="Show it in motion." FontSize="19" FontWeight="SemiBold" Margin="0,10,0,18"/><Button Content="Set up a recording" Click="RecordClick" HorizontalAlignment="Left"/><TextBlock x:Name="BackendHint" Text="Native recording · 60 FPS · MP4" Foreground="{DynamicResource MutedBrush}" Margin="0,12,0,0"/></StackPanel></Border>
+          </Grid>
+          <DockPanel Grid.Row="2" Margin="0,34,0,14"><Button DockPanel.Dock="Right" Content="Open output folder ↗" Click="FolderClick" Background="Transparent" BorderThickness="0" Padding="8,3"/><TextBlock Text="Recent captures" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/></DockPanel>
+          <StackPanel Grid.Row="3"><ListBox x:Name="RecentList" MouseDoubleClick="RecentOpen"/><TextBlock x:Name="EmptyRecent" Text="Your saved images and clips will appear here. You can also drop an image into Framelet." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="9,12"/></StackPanel>
+        </Grid></ScrollViewer>
+        <editor:ImageEditorView x:Name="Editor" Visibility="Collapsed"/>
+        <ContentControl x:Name="ClipHost" Visibility="Collapsed"/>
+      </Grid>
+    </Grid>
+    <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"><DockPanel Margin="16,0"><TextBlock DockPanel.Dock="Right" Text="LOCAL ONLY" FontSize="10" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/><TextBlock x:Name="Status" Text="Ready" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/></DockPanel></Border>
+  </Grid>
+</Window>

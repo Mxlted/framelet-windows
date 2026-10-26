@@ -38,6 +38,7 @@ public sealed class NativeRecordingBackend : IRecordingBackend
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ct.ThrowIfCancellationRequested();
+        if (_ended) throw new InvalidOperationException("Create a new recording session to record again.");
         if (Interlocked.Exchange(ref _used, 1) != 0) throw new InvalidOperationException("Create a new recording session to record again.");
         Validate(request);
         var hostPath = Path.Combine(AppContext.BaseDirectory, "Framelet.NativeHost.exe");
@@ -95,7 +96,7 @@ public sealed class NativeRecordingBackend : IRecordingBackend
 
     private async Task FinishCoreAsync(bool discard)
     {
-        if (_process is null || _ended) return;
+        if (_process is null || _ended) { _ended = true; return; }
         _finishing = true;
         var success = false;
         try

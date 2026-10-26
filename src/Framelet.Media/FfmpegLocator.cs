@@ -26,7 +26,11 @@ public static class FfmpegLocator
     public static async Task<string> VerifyAsync(string? configuredPath, CancellationToken ct = default)
     {
         var path = Find(configuredPath) ?? throw new FileNotFoundException("FFmpeg was not found. Set its executable in Settings → Recording, or install it from the linked download page.");
-        var result = await ProcessRunner.RunAsync(path, ["-hide_banner", "-version"], ct);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        ProcessResult result;
+        try { result = await ProcessRunner.RunAsync(path, ["-hide_banner", "-version"], deadline.Token); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new TimeoutException("FFmpeg did not respond within 10 seconds. Check the configured executable."); }
         if (result.ExitCode != 0 || !result.Output.Contains("ffmpeg version", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The selected executable did not identify itself as FFmpeg.");
         return path;
