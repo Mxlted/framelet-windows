@@ -13,6 +13,8 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args is ["--probe-hotkey", var probe]) return HotkeyTransactionChecks.Child(probe, false);
+        if (args is ["--hold-hotkey", var held]) return HotkeyTransactionChecks.Child(held, true);
         if (args.Contains("--select-region", StringComparer.Ordinal)) return RunOverlaySession(false);
         if (args.Contains("--select-window", StringComparer.Ordinal)) return RunOverlaySession(true);
         Check("negative-origin intersection retains physical coordinates", () =>
@@ -44,6 +46,21 @@ internal static class Program
             if (!result.IsFrozen) throw new Exception("Result should be safe to pass across threads.");
         });
         Check("empty capture is rejected before native allocation", () => Expect<ArgumentException>(() => CaptureService.CapturePixels(new(0, 0, 0, 10))));
+        Check("frozen window selection uses its original snapshot even after target closes", () =>
+        {
+            var source = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgr32, null, new byte[] { 1, 2, 3, 0 }, 4);
+            source.Freeze();
+            var target = new CaptureTarget(CaptureKind.Window, new(-100, -100, 1, 1), 0);
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+            try
+            {
+                typeof(CaptureService).GetField("_selectedTarget", flags)!.SetValue(null, target);
+                typeof(CaptureService).GetField("_selectedImage", flags)!.SetValue(null, source);
+                if (!ReferenceEquals(source, CaptureService.Capture(target))) throw new Exception("Frozen snapshot was recaptured.");
+                Expect<InvalidOperationException>(() => CaptureService.Capture(target));
+            }
+            finally { CaptureService.DiscardSelectionSnapshot(); }
+        });
         Check("oversized capture is rejected before native allocation", () => Expect<InvalidOperationException>(() => CaptureService.CapturePixels(new(0, 0, 100000, 100000))));
         Check("shortcut modifiers and virtual key are parsed", () =>
         {
@@ -55,8 +72,11 @@ internal static class Program
             if (HotkeyManager.TryParse("this is not a shortcut", out _, out _, out string? error) || string.IsNullOrWhiteSpace(error)) throw new Exception("Invalid shortcut accepted.");
         });
 
+        HotkeyTransactionChecks.Run(Check);
+
         if (args.Contains("--desktop", StringComparer.Ordinal))
         {
+            WindowCaptureChecks.Run(Check);
             Check("live desktop enumeration and capture agree", () =>
             {
                 var target = CaptureService.GetCurrentMonitor();

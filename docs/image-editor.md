@@ -22,12 +22,20 @@ For text, enter the wording in the contextual toolbar and click the image. Selec
 
 Export and clipboard copy rasterize the document. Blur and pixelation process the pixels of the image **and earlier annotations**, so changing layer order can change their result. These effects run locally and write altered pixels into the exported image. Use an opaque filled rectangle when information must be completely concealed: a weak blur or small pixel blocks can leave information recognizable.
 
+Processed regions replace all four pixel channels, including alpha. Translucent effects do not blend back over the unprocessed source. Cropping tests painted bounds, including thick strokes, round caps, and arrowheads, then translates and clips the retained editable objects. Text is conservatively retained because glyphs can extend outside their layout box.
+
 The renderer caches the committed document for responsive panning and drawing. During object dragging it renders the moving object above the other objects; the final layer order is restored when the drag finishes. A blur/pixelation preview can therefore differ where it overlaps later objects until committed.
 
+Effect drags use a scaled preview with at most one million pixels, processed on one background worker with a replaceable pending request and 33 ms coalescing. Only frozen sources cross threads; WPF visual drawing stays on the dispatcher. Geometry, zoom, source, selection, tool, document edits, and unloading invalidate pending results. Preview scaling is approximate. Committed rendering and export keep the exact full-resolution filter; committing a large effect can still take longer than a preview frame.
+
 Undo stores immutable bitmap references for annotation changes and limits history to 64 operations, with a 256 MiB budget for source images in history. The current image and at least one undo step can exceed that budget. Images are limited to 64 megapixels and 16,384 pixels per side to avoid exhausting desktop rendering resources.
+
+File imports inspect PNG header dimensions and deferred WIC frame dimensions before full pixel copying. Decoding uses one owned stream and produces a detached frozen bitmap. Failed imports leave the current document intact and release file handles. Clipboard images are already materialized by Windows when supplied to Framelet; their dimensions are checked before Framelet's own normalization copy.
 
 This version exports flattened images. It does not yet save editable project files, rotate objects, select several objects at once, or preserve multiple frames from animated images. Object edits are retained only while that image remains open; the application checks unsaved changes before replacing it.
 
 ## Validation
 
 Run `dotnet run --project tests/Framelet.Editor.Tests -c Release` on Windows. The test runner uses an STA thread and exercises DPI normalization, pixel output and compositing, annotation transforms, crop/resize, undo/redo branching, invalid bounds, and history limits. `-- --render artifacts/editor-preview.png` additionally creates a static UI rendering with a generated sample image. That static rendering is a layout check, not proof of live mouse or keyboard interaction.
+
+The suite also covers complete translucent/transparent/opaque effect exports, overlapping filters, painted crop intersections, decoder ownership, and preview cancellation/stale callbacks. The oversized PNG experiment runs in a child process with a 384 MiB memory cap and 15-second timeout. `-- --benchmark-preview` reports warmed 4K blur preview timings without machine-speed assertions. Actual measurements are in [audit fixes](audit-fixes.md).

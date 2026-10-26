@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Runtime.ExceptionServices;
 using Framelet.Core;
 
 namespace Framelet.Recording;
@@ -9,6 +10,7 @@ namespace Framelet.Recording;
 /// <summary>Isolates capture drivers and native codecs from the desktop application's process.</summary>
 public sealed class NativeRecordingBackend : IRecordingBackend
 {
+    private readonly string _hostPath;
     private readonly ConcurrentDictionary<int, TaskCompletionSource> _pending = new();
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly SemaphoreSlim _termination = new(1, 1);
@@ -25,14 +27,19 @@ public sealed class NativeRecordingBackend : IRecordingBackend
     private volatile bool _finishing;
     private int _reportedFailure;
     private volatile bool _completedOutput;
+    private volatile RecordingFileState _fileState;
     private Task? _finishTask;
 
     public string Name => "Windows native";
     public bool CanPause => true;
+    public string? RecoveryPath => _fileState == RecordingFileState.Finalized ? _stagingPath : null;
     internal int ProcessId => _process?.Id ?? 0;
     public event Action<string>? StatusChanged;
     public event Action<Exception>? Failed;
     public event Action? Completed;
+
+    public NativeRecordingBackend() : this(Path.Combine(AppContext.BaseDirectory, "Framelet.NativeHost.exe")) { }
+    internal NativeRecordingBackend(string hostPath) => _hostPath = hostPath;
 
     public async Task StartAsync(RecordingRequest request, CancellationToken ct = default)
     {
@@ -41,7 +48,7 @@ public sealed class NativeRecordingBackend : IRecordingBackend
         if (_ended) throw new InvalidOperationException("Create a new recording session to record again.");
         if (Interlocked.Exchange(ref _used, 1) != 0) throw new InvalidOperationException("Create a new recording session to record again.");
         Validate(request);
-        var hostPath = Path.Combine(AppContext.BaseDirectory, "Framelet.NativeHost.exe");
+        var hostPath = _hostPath;
         if (!File.Exists(hostPath))
             throw new FileNotFoundException("The native recording component is missing. Reinstall the complete Framelet package.", hostPath);
         var sessionId = Guid.NewGuid().ToString("N");
@@ -99,18 +106,23 @@ public sealed class NativeRecordingBackend : IRecordingBackend
         if (_process is null || _ended) { _ended = true; return; }
         _finishing = true;
         var success = false;
+        Exception? failure = null;
         try
         {
             await SendAsync(discard ? "cancel" : "stop", null,
                 TimeSpan.FromSeconds(discard ? 8 : 45)).ConfigureAwait(false);
             success = true;
         }
+        catch (Exception error) { failure = error; }
         finally
         {
             // MP4 publication happens only in the worker after finalization. Killing a hung
             // worker cannot overwrite an old file or publish a half-written destination.
             await TerminateAsync(deleteStaging: discard || !success).ConfigureAwait(false);
         }
+        if (RecoveryPath is { } recovery && (!discard || failure is not null))
+            throw new RecordingPublicationException(recovery, failure);
+        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private async Task SendAsync(string operation, NativeHostRequest? request, TimeSpan timeout,
@@ -150,8 +162,16 @@ public sealed class NativeRecordingBackend : IRecordingBackend
                 if (line.Length > 65536) throw new InvalidDataException("Invalid response from the recording component.");
                 var message = JsonSerializer.Deserialize<NativeHostMessage>(line);
                 if (message is null) continue;
+                if (message.RecoveryPath is not null)
+                {
+                    if (!string.Equals(Path.GetFullPath(message.RecoveryPath), _stagingPath, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("The recording component reported an unexpected recovery path.");
+                    _fileState = RecordingFileState.Finalized;
+                }
                 switch (message.Kind)
                 {
+                    case "finalized":
+                        break;
                     case "result":
                         if (_pending.TryGetValue(message.Id, out var response))
                         {
@@ -163,11 +183,12 @@ public sealed class NativeRecordingBackend : IRecordingBackend
                         Notify(message.Text ?? "");
                         break;
                     case "failed":
-                        Report(new IOException(message.Text ?? "Native recording failed."));
+                        Report(MapError(message));
                         _ = CleanupAfterFailureAsync();
                         break;
                     case "completed":
                         _completedOutput = true;
+                        _fileState = RecordingFileState.Published;
                         foreach (var handler in Completed?.GetInvocationList() ?? [])
                             try { ((Action)handler)(); }
                             catch (Exception ex) { Debug.WriteLine(ex); }
@@ -242,8 +263,11 @@ public sealed class NativeRecordingBackend : IRecordingBackend
             {
                 process.Dispose();
                 _process = null;
-                if (deleteStaging && _stagingPath is not null && File.Exists(_stagingPath))
+                if (deleteStaging && _fileState == RecordingFileState.Incomplete && _stagingPath is not null && File.Exists(_stagingPath))
+                {
                     File.Delete(_stagingPath);
+                    _fileState = RecordingFileState.Discarded;
+                }
             }
         }
         finally { _termination.Release(); }
@@ -262,6 +286,7 @@ public sealed class NativeRecordingBackend : IRecordingBackend
 
     private static Exception MapError(NativeHostMessage message) => message.ErrorType switch
     {
+        nameof(RecordingPublicationException) when message.RecoveryPath is not null => new RecordingPublicationException(message.RecoveryPath),
         nameof(ArgumentException) => new ArgumentException(message.Text),
         nameof(InvalidOperationException) => new InvalidOperationException(message.Text),
         nameof(TimeoutException) => new TimeoutException(message.Text),
@@ -281,8 +306,10 @@ public sealed class NativeRecordingBackend : IRecordingBackend
     private void Report(Exception error)
     {
         if (Interlocked.Exchange(ref _reportedFailure, 1) != 0) return;
+        if (RecoveryPath is { } recovery && error is not RecordingPublicationException)
+            error = new RecordingPublicationException(recovery, error);
         lock (_errors)
-            if (_errors.Length > 0) error = new IOException(error.Message + " " + _errors.ToString().Trim(), error);
+            if (_errors.Length > 0 && error is not RecordingPublicationException) error = new IOException(error.Message + " " + _errors.ToString().Trim(), error);
         foreach (var handler in Failed?.GetInvocationList() ?? [])
             try { ((Action<Exception>)handler)(error); }
             catch (Exception ex) { Debug.WriteLine(ex); }

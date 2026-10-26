@@ -16,6 +16,12 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (RecoveryChecks.IsFixture(args)) return RecoveryChecks.RunFixtureAsync(args).GetAwaiter().GetResult();
+        if (args.Contains("--without-ffmpeg"))
+        {
+            Environment.SetEnvironmentVariable("PATH", "");
+            Console.WriteLine("Native validation child process PATH is empty; no FFmpeg executable is available through PATH.");
+        }
         SetProcessDpiAwarenessContext(new nint(-4));
         if (!args.Contains("--live"))
         {
@@ -108,6 +114,52 @@ internal static class Program
                     Assert(!Directory.EnumerateFiles(directory, ".framelet-*.recording.mp4").Any(), "Native staging file was leaked.");
                 });
 
+                await Check("native late destination collision preserves a finalized MP4 through disposal", async () =>
+                {
+                    var recoveryDirectory = Path.Combine(directory, "recovery-explicit");
+                    Directory.CreateDirectory(recoveryDirectory);
+                    var file = Path.Combine(recoveryDirectory, "occupied.mp4");
+                    await using var recorder = new NativeRecordingBackend();
+                    await recorder.StartAsync(new(file, target, new() { SystemAudio = false, FfmpegPath = "missing-ffmpeg.exe" }));
+                    await Task.Delay(600);
+                    await File.WriteAllTextAsync(file, "existing destination sentinel");
+                    await Reject<RecordingPublicationException>(recorder.StopAsync);
+                    var recovery = recorder.RecoveryPath;
+                    await recorder.DisposeAsync(); await recorder.DisposeAsync();
+                    Assert(recovery is not null && File.Exists(recovery) && new FileInfo(recovery).Length > 1000, "Completed recovery MP4 was lost.");
+                    Assert(await File.ReadAllTextAsync(file) == "existing destination sentinel", "Existing destination was changed.");
+                    await RecordingRecovery.SaveAsAsync(recovery!, Path.Combine(recoveryDirectory, "saved-as.mp4"));
+                    Console.WriteLine("Externally decode recovery: " + recovery);
+                });
+
+                await Check("native natural completion collision survives automatic cleanup and disposal", async () =>
+                {
+                    var recoveryDirectory = Path.Combine(directory, "recovery-natural");
+                    Directory.CreateDirectory(recoveryDirectory);
+                    var child = new Window { Title = "Recovery capture target", Width = 320, Height = 240,
+                        Content = new TextBlock { Text = "Preserve completed recording", FontSize = 18 } };
+                    child.Show();
+                    var childTarget = new CaptureTarget(CaptureKind.Window, new(0, 0, 320, 240), new WindowInteropHelper(child).Handle);
+                    var file = Path.Combine(recoveryDirectory, "occupied.mp4");
+                    await using var recorder = new NativeRecordingBackend();
+                    var failure = new TaskCompletionSource<Exception>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    recorder.Failed += error => failure.TrySetResult(error);
+                    try
+                    {
+                        await recorder.StartAsync(new(file, childTarget, new() { SystemAudio = false }));
+                        await Task.Delay(600);
+                        await File.WriteAllTextAsync(file, "natural destination sentinel");
+                        child.Close();
+                        Assert(await failure.Task.WaitAsync(TimeSpan.FromSeconds(15)) is RecordingPublicationException,
+                            "Natural finalization did not report recovery.");
+                        await recorder.DisposeAsync(); await recorder.DisposeAsync();
+                        Assert(File.Exists(recorder.RecoveryPath), "Natural cleanup deleted the completed MP4.");
+                        Assert(await File.ReadAllTextAsync(file) == "natural destination sentinel", "Natural completion changed the existing destination.");
+                        Console.WriteLine("Externally decode recovery: " + recorder.RecoveryPath);
+                    }
+                    finally { child.Close(); }
+                });
+
                 await Check("native worker failure is isolated and staging is removed", async () =>
                 {
                     var file = Path.Combine(directory, "failed-worker.mp4");
@@ -144,6 +196,9 @@ internal static class Program
                     }
                     finally { child.Close(); }
                 });
+                var inspector = args.SkipWhile(a => a != "--decode-with").Skip(1).FirstOrDefault();
+                if (inspector is not null)
+                    await RecoveryChecks.VerifyMediaAsync(inspector, directory, Check);
             }
             catch (Exception ex) { _failed++; Console.WriteLine(ex); }
             finally { timer.Stop(); app.Shutdown(); }
@@ -159,6 +214,7 @@ internal static class Program
         var target = new CaptureTarget(CaptureKind.Region, new(0, 0, 640, 480));
         try
         {
+            await RecoveryChecks.RunAsync(directory, Check);
             await Check("pre-existing file is preserved", async () =>
             {
                 var file = Path.Combine(directory, "existing.mp4");

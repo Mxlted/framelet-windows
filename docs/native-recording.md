@@ -18,6 +18,8 @@ A real local test exposed a stalled native display startup. Isolation was added 
 
 The worker opens a unique `.framelet-<session>.recording.mp4` with `CreateNew`. It records into that stream, waits for Media Foundation's finalization callback, flushes it, closes native resources, then moves the file to the requested destination without overwrite. An existing destination is never replaced. If the final move fails, the completed staging MP4 is preserved and its path is reported. Cancellation and failed recordings are discarded. Power loss or forcibly terminating the entire application can leave a staging file; ordinary MP4 is not guaranteed recoverable after abrupt termination.
 
+After successful encoder completion, the worker flushes and closes its stream and announces finalized staging before fallible native teardown or publication. The supervisor, backend disposal, and automatic session cleanup retain that file even when publication fails or the worker then exits. The separate FFmpeg backend follows the same finalized-file ownership rule, including when disposal wins a race with the natural-exit observer. The recording window enters a recovery state with the actual path, **Copy details**, and **Save recording as…**. Save As never overwrites a destination and retains the recovery source even after a successful copy; it can be removed manually once the saved copy is checked. Closing the recovery window also leaves the file in place.
+
 The capture window closing or becoming minimized stops and finalizes the clip. A display-layout change also finalizes rather than continuing against stale geometry. Window resizing is handled by WGC frame-pool recreation and fitted into the original fixed output dimensions. It does not change the encoded frame size halfway through a file.
 
 ## Sources, encoding and audio
@@ -47,6 +49,8 @@ dotnet run --project tests/Framelet.Recording.Tests -c Release -- --live --outpu
 ```
 
 Use a new output directory each run. Existing files intentionally cause a failure. Integration outputs and native diagnostic logs are excluded from Git. For native diagnostics, set `FRAMELET_NATIVE_LOG` to an absolute local log path before launching. Logs contain device names and local paths; review them before sharing.
+
+Add `--without-ffmpeg` to the live suite to clear the test/worker PATH and configure an unavailable FFmpeg path. Native recording still starts, pauses/resumes, stops, and finalizes. Inspect generated files with a separately launched external decoder afterward. Deterministic subprocess fixtures test protocol and cleanup races, but their dummy bytes are not codec validation. The live suite adds late destination collisions and natural-completion recovery with real MP4 output. See [audit validation](audit-fixes.md).
 
 The deterministic checks cover destination preservation, output format, dimensions, settings, cancellation before startup, inactive pause, and staging cleanup. Live checks cover window recording, pause/resume, system/microphone audio, region recording, cancellation, forced worker failure, and natural completion after the captured window closes. Live results from the development machine are recorded separately from these runnable assertions; short recordings do not establish long-duration synchronization, capture on every GPU, or 120 FPS throughput.
 

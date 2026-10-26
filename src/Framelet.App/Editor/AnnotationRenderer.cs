@@ -24,7 +24,6 @@ public static class AnnotationRenderer
                     var underneath = Rasterize(visual, image.PixelWidth, image.PixelHeight);
                     visual = new DrawingVisual();
                     context = visual.RenderOpen();
-                    context.DrawImage(underneath, new Rect(0, 0, image.PixelWidth, image.PixelHeight));
                     context.PushClip(new RectangleGeometry(new Rect(0, 0, image.PixelWidth, image.PixelHeight)));
                     Draw(context, annotation, underneath);
                 }
@@ -127,28 +126,68 @@ public static class AnnotationRenderer
 
     private static void DrawEffect(DrawingContext context, BitmapSource source, Rect requested, EditorTool tool, int amount)
     {
-        int x = Math.Max(0, (int)Math.Floor(requested.X)), y = Math.Max(0, (int)Math.Floor(requested.Y));
-        int right = Math.Min(source.PixelWidth, (int)Math.Ceiling(requested.Right));
-        int bottom = Math.Min(source.PixelHeight, (int)Math.Ceiling(requested.Bottom));
-        if (right <= x || bottom <= y) return;
-        int width = right - x, height = bottom - y, stride = width * 4;
+        var region = EffectRegion(source, requested);
+        if (region.IsEmpty)
+        {
+            context.DrawImage(source, new Rect(0, 0, source.PixelWidth, source.PixelHeight));
+            return;
+        }
+        int width = region.Width, height = region.Height, stride = checked(width * 4);
         byte[] pixels = new byte[checked(stride * height)];
-        source.CopyPixels(new Int32Rect(x, y, width, height), pixels, stride, 0);
+        source.CopyPixels(region, pixels, stride, 0);
         if (tool == EditorTool.Pixelate) PixelEffects.Pixelate(pixels, width, height, amount);
         else PixelEffects.Blur(pixels, width, height, amount);
         var result = BitmapSource.Create(width, height, 96, 96, PixelFormats.Pbgra32, null, pixels, stride);
         result.Freeze();
-        context.DrawImage(result, new Rect(x, y, width, height));
+        DrawReplacement(context, source, new EffectPatch(result, new Rect(region.X, region.Y, width, height)));
+    }
+
+    internal static Int32Rect EffectRegion(BitmapSource source, Rect requested)
+    {
+        // Clamp doubles before conversion, including off-image annotations retained by cropping.
+        int x = (int)Math.Clamp(Math.Floor(requested.X), 0, source.PixelWidth);
+        int y = (int)Math.Clamp(Math.Floor(requested.Y), 0, source.PixelHeight);
+        int right = (int)Math.Clamp(Math.Ceiling(requested.Right), 0, source.PixelWidth);
+        int bottom = (int)Math.Clamp(Math.Ceiling(requested.Bottom), 0, source.PixelHeight);
+        return right <= x || bottom <= y ? Int32Rect.Empty : new Int32Rect(x, y, right - x, bottom - y);
+    }
+
+    internal static void DrawReplacement(DrawingContext context, BitmapSource source, EffectPatch patch)
+    {
+        var imageBounds = new Rect(0, 0, source.PixelWidth, source.PixelHeight);
+        // A processed pixel replaces all four source channels. Drawing it over the source
+        // would source-over blend translucent pixels, leaking contrast and increasing alpha.
+        context.PushClip(new CombinedGeometry(GeometryCombineMode.Exclude,
+            new RectangleGeometry(imageBounds), new RectangleGeometry(patch.Bounds)));
+        context.DrawImage(source, imageBounds);
+        context.Pop();
+        context.DrawImage(patch.Bitmap, patch.Bounds);
     }
 }
 
+internal sealed record EffectPatch(BitmapSource Bitmap, Rect Bounds);
+
 public static class PixelEffects
 {
-    public static void Pixelate(byte[] pixels, int width, int height, int blockSize)
+    public static void Pixelate(byte[] pixels, int width, int height, int blockSize, CancellationToken cancellationToken = default)
+        => PixelateCore(pixels, width, height, Math.Clamp(blockSize, 2, 128), cancellationToken);
+
+    public static void Blur(byte[] pixels, int width, int height, int radius, CancellationToken cancellationToken = default)
+        => BlurCore(pixels, width, height, Math.Clamp(radius, 2, 64), cancellationToken);
+
+    internal static void ApplyPreview(byte[] pixels, int width, int height, EditorTool tool, int amount, CancellationToken cancellationToken)
+    {
+        // A full-resolution two-pixel effect can occupy only one preview pixel.
+        if (tool == EditorTool.Pixelate) PixelateCore(pixels, width, height, Math.Clamp(amount, 1, 128), cancellationToken);
+        else BlurCore(pixels, width, height, Math.Clamp(amount, 1, 64), cancellationToken);
+    }
+
+    private static void PixelateCore(byte[] pixels, int width, int height, int blockSize, CancellationToken cancellationToken)
     {
         Validate(pixels, width, height);
-        blockSize = Math.Clamp(blockSize, 2, 128);
         for (int y = 0; y < height; y += blockSize)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             for (int x = 0; x < width; x += blockSize)
             {
                 int xmax = Math.Min(width, x + blockSize), ymax = Math.Min(height, y + blockSize);
@@ -161,27 +200,30 @@ public static class PixelEffects
                     for (int xx = x; xx < xmax; xx++)
                         for (int channel = 0; channel < 4; channel++) pixels[(yy * width + xx) * 4 + channel] = (byte)(sum[channel] / count);
             }
+        }
     }
 
-    public static void Blur(byte[] pixels, int width, int height, int radius)
+    private static void BlurCore(byte[] pixels, int width, int height, int radius, CancellationToken cancellationToken)
     {
         Validate(pixels, width, height);
-        radius = Math.Clamp(radius, 2, 64);
+        cancellationToken.ThrowIfCancellationRequested();
         byte[] temporary = new byte[pixels.Length];
         // Three separable box passes approximate a Gaussian with linear cost per pixel.
         for (int pass = 0; pass < 3; pass++)
         {
-            BoxPass(pixels, temporary, width, height, radius, horizontal: true);
-            BoxPass(temporary, pixels, width, height, radius, horizontal: false);
+            BoxPass(pixels, temporary, width, height, radius, horizontal: true, cancellationToken);
+            BoxPass(temporary, pixels, width, height, radius, horizontal: false, cancellationToken);
         }
     }
 
-    private static void BoxPass(byte[] input, byte[] output, int width, int height, int radius, bool horizontal)
+    private static void BoxPass(byte[] input, byte[] output, int width, int height, int radius, bool horizontal, CancellationToken cancellationToken)
     {
         int length = horizontal ? width : height, lines = horizontal ? height : width;
         int diameter = radius * 2 + 1;
         int Index(int line, int offset, int channel) => (horizontal ? line * width + offset : offset * width + line) * 4 + channel;
         for (int line = 0; line < lines; line++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             for (int channel = 0; channel < 4; channel++)
             {
                 int sum = 0;
@@ -193,6 +235,7 @@ public static class PixelEffects
                     sum += input[Index(line, Math.Clamp(position + radius + 1, 0, length - 1), channel)];
                 }
             }
+        }
     }
 
     private static void Validate(byte[] pixels, int width, int height)

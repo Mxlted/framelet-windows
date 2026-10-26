@@ -142,6 +142,36 @@ await Check("factory failure produces a usable retry state", async () =>
     await session.CancelAsync();
 });
 
+await Check("publication failure exposes recovery and Save As preserves originals", async () =>
+{
+    var root = Path.Combine(Path.GetTempPath(), "Framelet-session-recovery-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root);
+    try
+    {
+        var source = Path.Combine(root, "completed.mp4");
+        var occupied = Path.Combine(root, "occupied.mp4");
+        var destination = Path.Combine(root, "recovered.mp4");
+        await File.WriteAllBytesAsync(source, new byte[512]);
+        await File.WriteAllTextAsync(occupied, "preserve existing");
+        var fake = new FakeBackend { RecoveryPath = source, Stop = () => Task.FromException(new RecordingPublicationException(source)) };
+        var session = new RecordingSessionController(request, () => fake);
+        string? saved = null;
+        session.ClipSaved += path => saved = path;
+        await session.StartAsync(); await session.StopAsync();
+        Assert(session.Snapshot.State == RecordingSessionState.Recoverable && session.Snapshot.RecoveryPath == source,
+            "Publication failure was not distinguished from an incomplete recording.");
+        await session.StartAsync(); await session.CancelAsync();
+        Assert(session.Snapshot.State == RecordingSessionState.Recoverable && File.Exists(source), "Retry or cancellation lost recovery state.");
+        await session.SaveRecoveryAsync(occupied);
+        Assert(session.Snapshot.State == RecordingSessionState.Recoverable && await File.ReadAllTextAsync(occupied) == "preserve existing",
+            "Failed recovery replaced an existing file or lost the recovery action.");
+        await session.SaveRecoveryAsync(destination);
+        Assert(session.Snapshot.State == RecordingSessionState.Completed && saved == destination && File.Exists(source) && new FileInfo(destination).Length == 512,
+            "Save As did not preserve the completed source and notify the actual destination.");
+    }
+    finally { Directory.Delete(root, true); }
+});
+
 Console.WriteLine($"{passed} passed; {failed} failed");
 return failed == 0 ? 0 : 1;
 
@@ -157,6 +187,7 @@ internal sealed class FakeBackend : IRecordingBackend
 {
     public string Name => "deterministic test backend";
     public bool CanPause => true;
+    public string? RecoveryPath { get; set; }
     public event Action<string>? StatusChanged;
     public event Action<Exception>? Failed;
     public event Action? Completed;

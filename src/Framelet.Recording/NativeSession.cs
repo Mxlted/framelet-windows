@@ -17,12 +17,15 @@ internal sealed class NativeSession : IRecordingBackend
     private string? _outputPath;
     private bool _used;
     private bool _discard;
-    private bool _finalized;
+    private bool _released;
+    private RecordingFileState _fileState;
     private bool _disposed;
     private CancellationTokenSource? _watchCancellation;
 
     public string Name => "Windows native";
     public bool CanPause => true;
+    public string? RecoveryPath => _fileState == RecordingFileState.Finalized ? _stagingPath : null;
+    internal event Action<string>? Finalized;
     public event Action<string>? StatusChanged;
     public event Action<Exception>? Failed;
     public event Action? Completed;
@@ -105,8 +108,10 @@ internal sealed class NativeSession : IRecordingBackend
         await _operations.WaitAsync().ConfigureAwait(false);
         try
         {
-            _discard |= discard;
-            if (_finalized || !_used) return;
+            if (_released || !_used) return;
+            // A late cancel/dispose must not reinterpret natural successful completion
+            // as an incomplete take. Cancellation requested while encoding still discards.
+            _discard |= discard && !_completed.Task.IsCompletedSuccessfully;
             if (_recorder is not null && !_completed.Task.IsCompleted)
             {
                 Notify(discard ? "Discarding recording…" : "Finishing MP4…");
@@ -148,9 +153,11 @@ internal sealed class NativeSession : IRecordingBackend
 
     private async Task ReleaseAsync()
     {
-        if (_finalized) return;
-        _finalized = true;
+        if (_released) return;
+        _released = true;
         _watchCancellation?.Cancel();
+        _watchCancellation?.Dispose();
+        _watchCancellation = null;
         var recorder = _recorder;
         _recorder = null;
         if (recorder is not null)
@@ -158,41 +165,80 @@ internal sealed class NativeSession : IRecordingBackend
             recorder.OnStatusChanged -= OnNativeStatus;
             recorder.OnRecordingComplete -= OnNativeComplete;
             recorder.OnRecordingFailed -= OnNativeFailure;
-            await Task.Run(recorder.Dispose).ConfigureAwait(false);
         }
-        if (_stream is not null)
+        Task DisposeNative() => recorder is null ? Task.CompletedTask : Task.Run(recorder.Dispose);
+        if (!_discard && _completed.Task.IsCompletedSuccessfully && _stream is { } completedStream)
         {
-            try
+            // ScreenRecorderLib 7.0.1 releases its ManagedIStream before raising the
+            // successful completion event. Flush our owned stream and tell the supervisor
+            // to preserve it before native teardown can throw or stall.
+            _stream = null;
+            await FinalizeBeforeDisposalAsync(completedStream, MarkFinalized, DisposeNative).ConfigureAwait(false);
+        }
+        else
+        {
+            // An incomplete/cancelled encoder may still own the stream until disposal.
+            await DisposeNative().ConfigureAwait(false);
+            if (_stream is { } incompleteStream)
             {
-                await _stream.FlushAsync().ConfigureAwait(false);
-                _stream.Flush(true);
+                _stream = null;
+                await CloseStreamAsync(incompleteStream).ConfigureAwait(false);
             }
-            finally { await _stream.DisposeAsync().ConfigureAwait(false); _stream = null; }
         }
         if (_stagingPath is null || !File.Exists(_stagingPath)) return;
         if (_discard)
         {
+            _fileState = RecordingFileState.Discarded;
             File.Delete(_stagingPath);
             Notify("Recording discarded");
         }
         else
         {
-            if (new FileInfo(_stagingPath).Length < 32)
-            {
-                File.Delete(_stagingPath);
-                throw new IOException("Windows finished without producing a playable video.");
-            }
+            if (_fileState != RecordingFileState.Finalized) MarkFinalized();
             // Move has no overwrite flag. Even a file created during capture is preserved.
             try { File.Move(_stagingPath, _outputPath!); }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                throw new IOException($"The clip was recorded but could not be moved to its destination. The completed MP4 is preserved at {_stagingPath}.", ex);
+                throw new RecordingPublicationException(_stagingPath, ex);
             }
+            _fileState = RecordingFileState.Published;
             Notify("Recording saved");
             foreach (var handler in Completed?.GetInvocationList() ?? [])
                 try { ((Action)handler)(); }
                 catch (Exception ex) { Debug.WriteLine(ex); }
         }
+    }
+
+    private void MarkFinalized()
+    {
+        if (_stagingPath is null || !File.Exists(_stagingPath) || new FileInfo(_stagingPath).Length < 32)
+        {
+            _fileState = RecordingFileState.Discarded;
+            if (_stagingPath is not null && File.Exists(_stagingPath)) File.Delete(_stagingPath);
+            throw new IOException("Windows finished without producing a playable video.");
+        }
+        _fileState = RecordingFileState.Finalized;
+        Finalized?.Invoke(_stagingPath);
+    }
+
+    internal static async Task FinalizeBeforeDisposalAsync(FileStream stream, Action finalized, Func<Task> disposeNative)
+    {
+        try
+        {
+            await CloseStreamAsync(stream).ConfigureAwait(false);
+            finalized();
+        }
+        finally { await disposeNative().ConfigureAwait(false); }
+    }
+
+    private static async Task CloseStreamAsync(FileStream stream)
+    {
+        try
+        {
+            await stream.FlushAsync().ConfigureAwait(false);
+            stream.Flush(true);
+        }
+        finally { await stream.DisposeAsync().ConfigureAwait(false); }
     }
 
     private void OnNativeStatus(object? sender, RecordingStatusEventArgs e)

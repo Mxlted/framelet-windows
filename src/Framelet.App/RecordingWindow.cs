@@ -16,7 +16,7 @@ public sealed class RecordingWindow : Window
     private readonly RecordingSessionController session;
     private readonly TextBlock status = Ui.Text("Ready to record");
     private readonly TextBlock timerText = Ui.Text("00:00", 23);
-    private readonly Button start, pause, stop, restart, cancel;
+    private readonly Button start, pause, stop, restart, cancel, recover;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(200) };
     private bool finished, restarting, closeWhenCancelled;
     public event Action<string>? ClipSaved;
@@ -52,7 +52,8 @@ public sealed class RecordingWindow : Window
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 10) };
         start = Ui.Button("● Start", async () => await Start()); pause = Ui.Button("Pause", async () => await Pause()); stop = Ui.Button("Stop & save", async () => await Stop());
         restart = Ui.Button("Restart", async () => await Restart()); cancel = Ui.Button("Cancel", async () => await Cancel());
-        foreach (var button in new[] { start, pause, stop, restart, cancel }) buttons.Children.Add(button);
+        recover = Ui.Button("Save recording as…", async () => await SaveRecovery());
+        foreach (var button in new[] { start, pause, stop, restart, recover, cancel }) buttons.Children.Add(button);
         panel.Children.Add(buttons);
         status.TextWrapping = TextWrapping.Wrap;
         var statusMenu = new ContextMenu();
@@ -103,6 +104,12 @@ public sealed class RecordingWindow : Window
     private async Task Cancel()
     {
         var snapshot = session.Snapshot;
+        if (snapshot.State == RecordingSessionState.Recoverable && !snapshot.IsBusy)
+        {
+            finished = true;
+            Close();
+            return;
+        }
         if (snapshot.State == RecordingSessionState.Starting)
         {
             closeWhenCancelled = true;
@@ -129,7 +136,12 @@ public sealed class RecordingWindow : Window
         }
         var busy = snapshot.IsBusy || restarting;
         if (nativeAudio is not null) nativeAudio.IsEnabled = !busy && !snapshot.IsRecording;
-        start.IsEnabled = !busy && !snapshot.IsRecording && snapshot.State != RecordingSessionState.Completed;
+        var recovery = snapshot.State == RecordingSessionState.Recoverable;
+        start.Visibility = pause.Visibility = stop.Visibility = restart.Visibility = recovery ? Visibility.Collapsed : Visibility.Visible;
+        recover.Visibility = recovery ? Visibility.Visible : Visibility.Collapsed;
+        recover.IsEnabled = recovery && !busy;
+        cancel.Content = recovery ? "Close" : "Cancel";
+        start.IsEnabled = !busy && !snapshot.IsRecording && snapshot.State is not (RecordingSessionState.Completed or RecordingSessionState.Recoverable);
         pause.IsEnabled = !busy && snapshot.IsRecording && snapshot.CanPause;
         pause.Content = snapshot.State == RecordingSessionState.Paused ? "Resume" : "Pause";
         pause.ToolTip = request.Settings.UseFfmpeg ? "Pause is available with native recording." : "Pause without ending the clip";
@@ -137,6 +149,18 @@ public sealed class RecordingWindow : Window
         restart.IsEnabled = !busy && snapshot.IsRecording;
         cancel.IsEnabled = !busy || snapshot.State == RecordingSessionState.Starting;
         UpdateTimer();
+    }
+
+    private async Task SaveRecovery()
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Save completed recording", Filter = "MP4 video|*.mp4", DefaultExt = ".mp4",
+            FileName = System.IO.Path.GetFileNameWithoutExtension(request.OutputPath) + "-recovered.mp4",
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog(this) == true) await session.SaveRecoveryAsync(dialog.FileName);
+        Refresh();
     }
     private void UpdateTimer()
     {

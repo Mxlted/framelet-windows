@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Framelet.Core;
 
 namespace Framelet.Recording;
 
@@ -29,7 +30,9 @@ public static class NativeRecorderHost
                                 $".framelet-{request.SessionId}.recording.mp4");
                             session = new NativeSession(staging);
                             session.StatusChanged += message => Send(new("status", Text: message));
-                            session.Failed += error => Send(new("failed", Text: error.Message));
+                            session.Failed += error => Send(new("failed", Text: error.Message, ErrorType: error.GetType().Name,
+                                RecoveryPath: (error as RecordingPublicationException)?.RecoveryPath));
+                            session.Finalized += path => Send(new("finalized", RecoveryPath: path));
                             session.Completed += () => Send(new("completed"));
                             await session.StartAsync(request.ToRecordingRequest()).ConfigureAwait(false);
                             break;
@@ -52,7 +55,8 @@ public static class NativeRecorderHost
                 }
                 catch (Exception ex)
                 {
-                    Send(new("result", command.Id, ex.Message, ex.GetType().Name));
+                    Send(new("result", command.Id, ex.Message, ex.GetType().Name,
+                        (ex as RecordingPublicationException)?.RecoveryPath));
                 }
                 if (command.Operation is "stop" or "cancel") break;
             }

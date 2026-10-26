@@ -89,9 +89,21 @@ public static class CaptureService
             return image;
         }
         DiscardSelectionSnapshot();
-        if (target.Kind == CaptureKind.Window && (!CaptureNative.IsWindow(target.WindowHandle) || CaptureNative.IsIconic(target.WindowHandle)))
-            throw new InvalidOperationException("The selected window has closed or is minimized.");
+        target = RefreshLiveTarget(target);
         return CapturePixels(Intersect(target.Bounds, GetDesktop().Bounds));
+    }
+
+    internal static CaptureTarget RefreshLiveTarget(CaptureTarget target)
+    {
+        if (target.Kind != CaptureKind.Window) return target;
+        using var awareness = new CaptureNative.PhysicalPixels();
+        if (!CaptureNative.IsWindow(target.WindowHandle) || CaptureNative.IsIconic(target.WindowHandle))
+            throw new InvalidOperationException("The selected window has closed or is minimized.");
+        // Keep the originally selected HWND, even if another application is now foreground.
+        var bounds = CaptureNative.WindowBounds(target.WindowHandle);
+        if (!CaptureNative.IsWindow(target.WindowHandle) || CaptureNative.IsIconic(target.WindowHandle))
+            throw new InvalidOperationException("The selected window has closed or is minimized.");
+        return target with { Bounds = bounds };
     }
 
     public static void DiscardSelectionSnapshot() { _selectedTarget = null; _selectedImage = null; }

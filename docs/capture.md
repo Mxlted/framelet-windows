@@ -8,6 +8,8 @@ Region selection creates one borderless window for each display. HWND positions 
 
 The overlay shows a frozen desktop. The selected screenshot is cropped from that same frame, with no recapture of the overlay. A small result gets an independent pixel buffer so it does not keep the full desktop alive. Recording callers discard this pending still with `DiscardSelectionSnapshot()` after selecting their target.
 
+Delayed active-window capture retains the HWND chosen before the delay or unsaved-image prompt. Immediately before live capture it rechecks that HWND and refreshes its physical DWM bounds, then clips to the desktop. A closed or minimized target produces a recoverable error. Frozen overlay selections continue to use their original snapshot.
+
 ## Controls
 
 - Drag and release to capture a region; Shift constrains it to a square.
@@ -17,6 +19,8 @@ The overlay shows a frozen desktop. The selected screenshot is cropped from that
 - Escape or right-click cancels without writing a file.
 
 Global hotkeys use RegisterHotKey with MOD_NOREPEAT, report conflicts, and release every owned registration on shutdown. An invalid replacement leaves the previous shortcut registered.
+
+Settings changes reserve new key/modifier pairs before saving or releasing previous bindings. Equivalent spellings count as duplicates; disabling and swapping actions are supported. Conflicts and failed settings saves leave the old bindings and persisted file intact. Pending hotkey callbacks are invalidated when their action is removed, reassigned, or disposed.
 
 ## Boundaries
 
@@ -33,4 +37,4 @@ Global hotkeys use RegisterHotKey with MOD_NOREPEAT, report conflicts, and relea
 - [Microsoft: BitBlt](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-bitblt)
 - [Microsoft: per-monitor DPI awareness](https://learn.microsoft.com/en-us/windows/win32/hidpi/high-dpi-desktop-application-development-on-windows)
 
-Validation results are recorded in `validation.md`; this design is not itself evidence of a mixed-DPI hardware test.
+Validation results are recorded in [status](status.md) and [audit fixes](audit-fixes.md); this design is not itself evidence of a mixed-DPI hardware test.

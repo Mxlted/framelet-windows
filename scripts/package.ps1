@@ -3,6 +3,7 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$')][string]$Version = '0.1.0-preview.1',
     [string]$VCRuntimeDirectory,
     [string]$InnoCompiler,
+    [string]$OutputDirectory,
     [switch]$SkipTests,
     [switch]$PortableOnly,
     [switch]$Force
@@ -10,7 +11,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
-$releaseDirectory = Join-Path $projectRoot 'artifacts/releases'
+$releaseDirectory = if ($OutputDirectory) {
+    if ([IO.Path]::IsPathFullyQualified($OutputDirectory)) { [IO.Path]::GetFullPath($OutputDirectory) }
+    else { [IO.Path]::GetFullPath((Join-Path $projectRoot $OutputDirectory)) }
+} else { Join-Path $projectRoot 'artifacts/releases' }
 $packageName = "Framelet-$Version-win-x64"
 $portablePath = Join-Path $releaseDirectory "$packageName-portable.zip"
 $installerPath = Join-Path $releaseDirectory "$packageName-setup.exe"

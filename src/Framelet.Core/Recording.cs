@@ -32,6 +32,7 @@ public interface IRecordingBackend : IAsyncDisposable
 {
     string Name { get; }
     bool CanPause { get; }
+    string? RecoveryPath => null;
     event Action<string>? StatusChanged;
     event Action<Exception>? Failed;
     event Action? Completed;

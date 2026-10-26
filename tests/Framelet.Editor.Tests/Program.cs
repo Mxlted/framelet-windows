@@ -11,6 +11,10 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (ImageSafetyChecks.TryRunChild(args, out var childExitCode)) return childExitCode;
+        if (args.Contains("--benchmark-preview")) return PreviewBenchmarks.Run();
+        ImageSafetyChecks.Run(Check);
+        EffectChecks.Run(Check);
         Check("DPI is normalized without changing physical pixels", () =>
         {
             var document = new ImageDocument(Solid(32, 24, Colors.AliceBlue, 192));

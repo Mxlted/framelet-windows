@@ -12,13 +12,15 @@ namespace Framelet.App;
 public sealed class SettingsWindow : Window
 {
     private readonly AppSettings draft;
+    private readonly Action<AppSettings> apply;
     private readonly StackPanel page = new() { Margin = new Thickness(28, 24, 34, 20) };
     private readonly ListBox navigation = new() { Margin = new Thickness(10, 16, 10, 0) };
     private readonly TextBlock error = Ui.Text("", 12);
     public AppSettings Result => draft;
 
-    public SettingsWindow(AppSettings current, string initial = "General")
+    public SettingsWindow(AppSettings current, Action<AppSettings> apply, string initial = "General")
     {
+        this.apply = apply;
         SetResourceReference(StyleProperty, typeof(Window));
         draft = SettingsStore.Clone(current);
         Title = "Framelet settings"; Width = 830; Height = 710; MinWidth = 740; MinHeight = 600; WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -144,10 +146,14 @@ public sealed class SettingsWindow : Window
         {
             draft.Validate(); FfmpegArguments.ParseAdvanced(draft.Recording.FfmpegExtraArguments);
             var shortcuts = new[] { draft.RegionHotkey, draft.WindowHotkey, draft.MonitorHotkey, draft.RecordHotkey }.Where(x => !string.IsNullOrWhiteSpace(x)).ToArray();
-            foreach (var shortcut in shortcuts) if (!HotkeyManager.TryParse(shortcut, out _, out _, out var reason)) throw new ArgumentException(reason);
-            if (shortcuts.Distinct(StringComparer.OrdinalIgnoreCase).Count() != shortcuts.Length) throw new ArgumentException("Each action needs a different hotkey.");
+            var pairs = new HashSet<(uint, uint)>();
+            foreach (var shortcut in shortcuts)
+            {
+                if (!HotkeyManager.TryParse(shortcut, out var modifiers, out var key, out var reason)) throw new ArgumentException(reason);
+                if (!pairs.Add((modifiers, key))) throw new ArgumentException("Each action needs a different hotkey.");
+            }
             if (!draft.CopyAfterCapture && !draft.SaveAfterCapture && !draft.OpenEditorAfterCapture) throw new ArgumentException("Enable at least one post-capture action.");
-            ((App)Application.Current).Store.Save(draft); DialogResult = true;
+            apply(draft); DialogResult = true;
         }
         catch (Exception ex) { error.Text = ex.Message; }
     }

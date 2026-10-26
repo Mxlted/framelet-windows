@@ -14,6 +14,12 @@ public sealed class ImageDocument
 
     public ImageDocument(BitmapSource image, bool isSaved = true)
     {
+        _state = new State(Normalize(image), [], Guid.NewGuid());
+        _savedRevision = isSaved ? _state.Revision : Guid.Empty;
+    }
+
+    internal static BitmapSource Normalize(BitmapSource image)
+    {
         ArgumentNullException.ThrowIfNull(image);
         ValidateDimensions(image.PixelWidth, image.PixelHeight);
         // Normalize DPI metadata: document coordinates always represent image pixels.
@@ -23,8 +29,7 @@ public sealed class ImageDocument
         converted.CopyPixels(pixels, stride, 0);
         var normalized = BitmapSource.Create(image.PixelWidth, image.PixelHeight, 96, 96, PixelFormats.Pbgra32, null, pixels, stride);
         normalized.Freeze();
-        _state = new State(normalized, [], Guid.NewGuid());
-        _savedRevision = isSaved ? _state.Revision : Guid.Empty;
+        return normalized;
     }
 
     public BitmapSource Image => _state.Image;
@@ -61,7 +66,7 @@ public sealed class ImageDocument
 
     public void Crop(Int32Rect crop)
     {
-        if (crop.Width < 1 || crop.Height < 1 || crop.X < 0 || crop.Y < 0 || crop.X + crop.Width > Width || crop.Y + crop.Height > Height)
+        if (crop.Width < 1 || crop.Height < 1 || crop.X < 0 || crop.Y < 0 || (long)crop.X + crop.Width > Width || (long)crop.Y + crop.Height > Height)
             throw new ArgumentOutOfRangeException(nameof(crop), "Crop must be inside the image.");
         if (crop == new Int32Rect(0, 0, Width, Height)) return;
         int stride = checked(crop.Width * 4);
@@ -70,7 +75,10 @@ public sealed class ImageDocument
         var image = BitmapSource.Create(crop.Width, crop.Height, 96, 96, PixelFormats.Pbgra32, null, pixels, stride);
         image.Freeze();
         var bounds = new Rect(crop.X, crop.Y, crop.Width, crop.Height);
-        Change(image, Annotations.Where(a => bounds.IntersectsWith(a.Bounds)).Select(a => a.Translate(new Vector(-crop.X, -crop.Y))).ToArray());
+        // Text may extend beyond its layout box; keep it conservatively. Other
+        // objects use painted bounds, including round caps and arrowhead wings.
+        Change(image, Annotations.Where(a => a.Tool == EditorTool.Text || bounds.IntersectsWith(a.RenderedBounds))
+            .Select(a => a.Translate(new Vector(-crop.X, -crop.Y))).ToArray());
     }
 
     public void Resize(int width, int height)

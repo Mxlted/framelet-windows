@@ -26,6 +26,7 @@ Check("Invalid editor width rejected", () => Reject(() => new AppSettings { Edit
 Check("Save failure preserves previous contents", () => { var s = new AppSettings(); store.Save(s); var before = File.ReadAllText(settingsPath); s.Recording.FrameRate = 900; Reject(() => store.Save(s)); Require(File.ReadAllText(settingsPath) == before); });
 Check("Settings drafts are independent", () => { var s = new AppSettings(); var copy = SettingsStore.Clone(s); copy.Recording.UseFfmpeg = true; Require(!s.Recording.UseFfmpeg); });
 Check("No temporary settings files remain", () => Require(Directory.GetFiles(testRoot, "*.tmp").Length == 0));
+SettingsFailureChecks.Run(Check, testRoot);
 foreach (var invalid in new[] { "../escape", "sub/name", "{unknown}", "NUL", "CON.txt", "COM1", "...", "a?b" })
     Check("Reject unsafe filename " + invalid, () => Reject(() => OutputPaths.ValidatePattern(invalid)));
 Check("Output filenames are deterministic", () => Require(Path.GetFileName(OutputPaths.Next(testRoot, "Clip_{date}_{time}", ".png", new DateTime(2026, 10, 26, 12, 30, 14))) == "Clip_2026-10-26_12-30-14.png"));
@@ -53,6 +54,7 @@ if (args.Contains("--ffmpeg-integration"))
 {
     async Task Live(string name, Func<Task> action) { count++; try { await action(); Console.WriteLine("PASS " + name); } catch (Exception ex) { failures++; Console.WriteLine("FAIL " + name + ": " + ex); } }
     var exe = await FfmpegLocator.VerifyAsync("");
+    await RecordingRecoveryChecks.RunIntegrationAsync(exe, testRoot, Live);
     var source = Path.Combine(testRoot, "source.mp4");
     await Live("FFmpeg synthetic clip generation", async () => { var result = await ProcessRunner.RunAsync(exe, ["-hide_banner", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", source]); Require(result.ExitCode == 0); });
     foreach (var mode in Enum.GetValues<ClipExportMode>())

@@ -36,6 +36,10 @@ The optional FFmpeg backend runs `gdigrab` and an optional explicitly named Dire
 
 Tests are small executable suites with a nonzero failure exit code. Native/GPU/audio tests are opt-in, because hosted CI cannot represent an interactive Windows desktop. Dependencies are pinned and lockfiles are committed. Settings use an atomic replacement; malformed files are preserved until the user explicitly saves new settings. Recording/export files use private staging names and never silently overwrite an existing destination.
 
+Unreadable settings (including denied access) also retain the original file and start with defaults and a warning. Invalid store paths remain caller errors. Applying settings reserves all new native hotkey pairs before the atomic save; a conflict or failed save releases only those reservations. Existing pairs remain registered through swaps and rollback, and queued callbacks are checked against their current owner.
+
+Recording files have separate incomplete, discarded, finalized, and published states. Publication failures carry a recovery path through the worker protocol and session controller; cleanup only deletes incomplete media. Recovery Save As copies through a new staging file and publishes without overwrite, retaining the recovery source.
+
 ## Research record
 
 Reviewed October 26, 2026:

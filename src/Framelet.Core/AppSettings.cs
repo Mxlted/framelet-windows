@@ -41,12 +41,13 @@ public sealed class AppSettings
 public sealed class SettingsStore(string path)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    public string Path { get; } = path;
+    // Invalid store paths are caller errors, not recoverable user-file corruption.
+    public string Path { get; } = System.IO.Path.GetFullPath(path);
     public string? LoadWarning { get; private set; }
 
     public AppSettings Load()
     {
-        if (!File.Exists(Path)) return new();
+        LoadWarning = null;
         try
         {
             var value = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Path), JsonOptions)
@@ -55,7 +56,9 @@ public sealed class SettingsStore(string path)
             value.Validate();
             return value;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or ArgumentException or InvalidDataException)
+        catch (FileNotFoundException) { return new(); }
+        catch (DirectoryNotFoundException) { return new(); }
+        catch (Exception ex) when (ex is JsonException or IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
         {
             LoadWarning = $"Settings could not be read. Defaults are in use. Your file was preserved at {Path}. {ex.Message}";
             return new();

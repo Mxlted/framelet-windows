@@ -2,10 +2,10 @@ using System.Diagnostics;
 
 namespace Framelet.Core;
 
-public enum RecordingSessionState { Ready, Starting, Recording, Paused, Finishing, Completed, Cancelled, Failed }
+public enum RecordingSessionState { Ready, Starting, Recording, Paused, Finishing, Completed, Recoverable, Cancelled, Failed }
 
 public sealed record RecordingSessionSnapshot(RecordingSessionState State, bool IsBusy, string Status,
-    bool CanPause, TimeSpan Elapsed)
+    bool CanPause, TimeSpan Elapsed, string? RecoveryPath = null)
 {
     public bool IsRecording => State is RecordingSessionState.Recording or RecordingSessionState.Paused;
 }
@@ -20,6 +20,7 @@ public sealed class RecordingSessionController(RecordingRequest request, Func<IR
     private long _generation;
     private bool _busy, _completed, _cancelled;
     private Exception? _failure;
+    private string? _recoveryPath;
     private RecordingSessionState _state = RecordingSessionState.Ready;
     private string _status = "Ready to record";
 
@@ -28,7 +29,7 @@ public sealed class RecordingSessionController(RecordingRequest request, Func<IR
 
     public RecordingSessionSnapshot Snapshot
     {
-        get { lock (_gate) return new(_state, _busy, _status, _backend?.CanPause == true, _elapsed.Elapsed); }
+        get { lock (_gate) return new(_state, _busy, _status, _backend?.CanPause == true, _elapsed.Elapsed, _recoveryPath); }
     }
 
     public async Task StartAsync()
@@ -37,7 +38,7 @@ public sealed class RecordingSessionController(RecordingRequest request, Func<IR
         long generation;
         lock (_gate)
         {
-            if (_busy || _state is RecordingSessionState.Recording or RecordingSessionState.Paused or RecordingSessionState.Completed) return;
+            if (_busy || _state is RecordingSessionState.Recording or RecordingSessionState.Paused or RecordingSessionState.Completed or RecordingSessionState.Recoverable) return;
             _busy = true;
             _completed = _cancelled = false;
             _failure = null;
@@ -113,6 +114,32 @@ public sealed class RecordingSessionController(RecordingRequest request, Func<IR
     public Task StopAsync() => OperateAsync("stop");
     public Task CancelAsync() => OperateAsync("cancel");
 
+    public async Task SaveRecoveryAsync(string destination)
+    {
+        string source;
+        lock (_gate)
+        {
+            if (_busy || _state != RecordingSessionState.Recoverable || _recoveryPath is null) return;
+            source = _recoveryPath;
+            _busy = true;
+            _status = "Saving completed recording…";
+        }
+        Notify();
+        var saved = false;
+        try
+        {
+            await RecordingRecovery.SaveAsAsync(source, destination).ConfigureAwait(false);
+            lock (_gate) { _state = RecordingSessionState.Completed; _status = "Recording saved"; }
+            saved = true;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            lock (_gate) _status = $"{error.Message} The completed recording is still preserved at {source}.";
+        }
+        finally { lock (_gate) _busy = false; Notify(); }
+        if (saved) InvokeSafely(ClipSaved, Path.GetFullPath(destination));
+    }
+
     private async Task OperateAsync(string operation)
     {
         IRecordingBackend? backend;
@@ -121,6 +148,7 @@ public sealed class RecordingSessionController(RecordingRequest request, Func<IR
         lock (_gate)
         {
             if (_busy) return;
+            if (_state == RecordingSessionState.Recoverable) return;
             backend = _backend;
             if (backend is null)
             {
@@ -223,10 +251,12 @@ public sealed class RecordingSessionController(RecordingRequest request, Func<IR
         lock (_gate)
         {
             if (!Current(backend, generation)) return;
-            saved = _completed;
-            _state = saved ? RecordingSessionState.Completed : _failure is not null
+            _recoveryPath = backend.RecoveryPath ?? (_failure as RecordingPublicationException)?.RecoveryPath;
+            saved = _completed && _recoveryPath is null;
+            _state = _recoveryPath is not null ? RecordingSessionState.Recoverable : saved ? RecordingSessionState.Completed : _failure is not null
                 ? RecordingSessionState.Failed : RecordingSessionState.Cancelled;
-            _status = saved ? "Recording saved" : _failure?.Message ?? "Recording cancelled";
+            _status = _recoveryPath is not null ? new RecordingPublicationException(_recoveryPath).Message
+                : saved ? "Recording saved" : _failure?.Message ?? "Recording cancelled";
             _elapsed.Stop();
             _backend = null;
             _busy = false;

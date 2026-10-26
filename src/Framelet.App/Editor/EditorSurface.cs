@@ -19,6 +19,10 @@ internal sealed class EditorSurface : FrameworkElement
     private Guid? _selectedId;
     private readonly List<Point> _penPoints = [];
     private Rect? _crop;
+    private EffectPreviewRenderer? _effectPreview;
+    private EditorTool _tool = EditorTool.Select;
+    private double _zoom = 1;
+    private int _effectSize = 12;
 
     public EditorSurface()
     {
@@ -26,6 +30,12 @@ internal sealed class EditorSurface : FrameworkElement
         ClipToBounds = false;
         SnapsToDevicePixels = true;
         Cursor = Cursors.Cross;
+        Unloaded += (_, _) =>
+        {
+            ResetDrag();
+            _effectPreview?.Dispose();
+            _effectPreview = null;
+        };
     }
 
     public ImageDocument? Document
@@ -42,14 +52,40 @@ internal sealed class EditorSurface : FrameworkElement
         }
     }
 
-    public EditorTool Tool { get; set; } = EditorTool.Select;
+    public EditorTool Tool
+    {
+        get => _tool;
+        set { if (_tool == value) return; ResetDrag(); _tool = value; InvalidateVisual(); }
+    }
     public Color StrokeColor { get; set; } = Color.FromRgb(241, 113, 88);
     public double StrokeWidth { get; set; } = 4;
     public double TextSize { get; set; } = 24;
     public string TextContent { get; set; } = "Your text";
     public bool Filled { get; set; }
-    public int EffectSize { get; set; } = 12;
-    public double Zoom { get; set; } = 1;
+    public int EffectSize
+    {
+        get => _effectSize;
+        set
+        {
+            if (_effectSize == value) return;
+            _effectSize = value;
+            if (_preview is { Tool: EditorTool.Blur or EditorTool.Pixelate }) _preview = _preview with { EffectSize = value };
+            _effectPreview?.Clear();
+            InvalidateVisual();
+        }
+    }
+    public double Zoom
+    {
+        get => _zoom;
+        set
+        {
+            if (!double.IsFinite(value) || value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            if (_zoom == value) return;
+            _zoom = value;
+            _effectPreview?.Clear();
+            InvalidateVisual();
+        }
+    }
     public Annotation? Selected => Document?.Annotations.FirstOrDefault(item => item.Id == _selectedId);
     public Rect? PendingCrop => _crop;
     public event EventHandler? SelectionChanged;
@@ -59,6 +95,7 @@ internal sealed class EditorSurface : FrameworkElement
 
     private void OnDocumentChanged(object? sender, EventArgs args)
     {
+        ResetDrag();
         if (Document != null) { Width = Document.Width; Height = Document.Height; }
         _rendered = null;
         _withoutSelected = null;
@@ -73,12 +110,28 @@ internal sealed class EditorSurface : FrameworkElement
         if (Document == null) return;
         context.DrawRectangle(Checkerboard(), null, new Rect(0, 0, Width, Height));
         _rendered ??= Document.Export();
-        context.DrawImage(_withoutSelected ?? _rendered, new Rect(0, 0, Width, Height));
-        if (_preview != null)
+        var underneath = _withoutSelected ?? _rendered;
+        if (_preview is { Tool: EditorTool.Blur or EditorTool.Pixelate } effect)
         {
-            context.PushClip(new RectangleGeometry(new Rect(0, 0, Width, Height)));
-            AnnotationRenderer.Draw(context, _preview, _withoutSelected ?? _rendered);
-            context.Pop();
+            if (_effectPreview == null)
+            {
+                _effectPreview = new EffectPreviewRenderer(Dispatcher);
+                _effectPreview.Changed += InvalidateVisual;
+            }
+            var dpi = VisualTreeHelper.GetDpi(this);
+            _effectPreview.RequestPreview(underneath, effect, Zoom * Math.Max(dpi.DpiScaleX, dpi.DpiScaleY));
+            if (_effectPreview.Result is { } patch) AnnotationRenderer.DrawReplacement(context, underneath, patch);
+            else context.DrawImage(underneath, new Rect(0, 0, Width, Height));
+        }
+        else
+        {
+            context.DrawImage(underneath, new Rect(0, 0, Width, Height));
+            if (_preview != null)
+            {
+                context.PushClip(new RectangleGeometry(new Rect(0, 0, Width, Height)));
+                AnnotationRenderer.Draw(context, _preview, underneath);
+                context.Pop();
+            }
         }
         if (_crop is Rect crop)
         {
@@ -154,8 +207,8 @@ internal sealed class EditorSurface : FrameworkElement
         }
         else
         {
-            _drawing = true;
             Select(null);
+            _drawing = true;
             if (Tool == EditorTool.Crop)
             {
                 _crop = new Rect(_anchor, _anchor);
@@ -252,6 +305,7 @@ internal sealed class EditorSurface : FrameworkElement
         _withoutSelected = null;
         _drawing = _moving = false;
         _resizeHandle = -1;
+        _effectPreview?.Clear();
         InvalidateVisual();
     }
 
@@ -263,6 +317,7 @@ internal sealed class EditorSurface : FrameworkElement
 
     public void Select(Guid? id)
     {
+        if (_selectedId != id) ResetDrag();
         _selectedId = id;
         SelectionChanged?.Invoke(this, EventArgs.Empty);
         InvalidateVisual();
@@ -314,6 +369,7 @@ internal sealed class EditorSurface : FrameworkElement
 
     private void ResetDrag()
     {
+        _effectPreview?.Clear();
         _drawing = _moving = false;
         _preview = _original = null;
         _withoutSelected = null;

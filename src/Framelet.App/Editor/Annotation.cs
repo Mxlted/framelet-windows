@@ -33,6 +33,26 @@ public sealed record Annotation
         }
     }
 
+    // Bounds is the editable geometry box. Cropping must consider the pixels
+    // painted outside that box, without changing selection/resize coordinates.
+    public Rect RenderedBounds
+    {
+        get
+        {
+            var bounds = Bounds;
+            double margin = Tool is EditorTool.Pen or EditorTool.Arrow or EditorTool.Rectangle or EditorTool.Ellipse
+                ? Math.Max(0, StrokeWidth) / 2 : 0;
+            if (Tool == EditorTool.Arrow)
+            {
+                double head = Math.Min((End - Start).Length * .6, Math.Max(13, StrokeWidth * 3.5));
+                margin = Math.Max(margin, head * .48);
+            }
+            // One pixel also covers antialiasing at the painted edge.
+            bounds.Inflate(margin + 1, margin + 1);
+            return bounds;
+        }
+    }
+
     public Annotation Translate(Vector offset) => this with
     {
         Start = Start + offset, End = End + offset,

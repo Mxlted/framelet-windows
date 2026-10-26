@@ -18,17 +18,18 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        DispatcherUnhandledException += (_, args) =>
+        {
+            try { Directory.CreateDirectory(DataDirectory); File.AppendAllText(Path.Combine(DataDirectory, "errors.log"), DateTimeOffset.Now + " " + args.Exception + Environment.NewLine); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            MessageBox.Show(args.Exception.Message, "Framelet couldn't complete that action", MessageBoxButton.OK, MessageBoxImage.Error);
+            args.Handled = true;
+        };
         instance = new Mutex(true, "Local\\Framelet." + Environment.UserName, out var first);
         if (!first) { MessageBox.Show("Framelet is already running. Open it from the system tray.", "Framelet"); Shutdown(); return; }
         Settings = Store.Load();
         EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent, new RoutedEventHandler((sender, _) => ApplyTitleTheme((Window)sender)));
         ApplyTheme(Settings.Theme);
-        DispatcherUnhandledException += (_, args) =>
-        {
-            try { Directory.CreateDirectory(DataDirectory); File.AppendAllText(Path.Combine(DataDirectory, "errors.log"), DateTimeOffset.Now + " " + args.Exception + Environment.NewLine); } catch (IOException) { }
-            MessageBox.Show(args.Exception.Message, "Framelet couldn't complete that action", MessageBoxButton.OK, MessageBoxImage.Error);
-            args.Handled = true;
-        };
         var window = new MainWindow();
         MainWindow = window;
         window.Show();

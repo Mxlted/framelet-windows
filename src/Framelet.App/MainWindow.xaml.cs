@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Framelet.App.Capture;
+using Framelet.App.Editor;
 using Framelet.Core;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
@@ -31,19 +32,37 @@ public partial class MainWindow : Window
         Closing += OnClosing;
     }
 
-    private void Configure()
+    private void Configure(bool registerHotkeys = true)
     {
         app.ApplyTheme(app.Settings.Theme); Editor.ApplyDefaults(app.Settings.EditorColor, app.Settings.EditorStroke);
         CaptureHint.Text = app.Settings.RegionHotkey.Replace("+", " + ");
         BackendHint.Text = (app.Settings.Recording.UseFfmpeg ? "FFmpeg" : "Native recording") + " · " + app.Settings.Recording.FrameRate + " FPS · MP4";
-        hotkeys?.UnregisterAll();
         List<string> issues = [];
-        void Register(string id, string gesture, Action action) { if (string.IsNullOrWhiteSpace(gesture)) return; var result = hotkeys?.Register(id, gesture, action); if (result is not null) issues.Add(result); }
-        Register("region", app.Settings.RegionHotkey, async () => await Capture("region"));
-        Register("window", app.Settings.WindowHotkey, async () => await Capture("active"));
-        Register("monitor", app.Settings.MonitorHotkey, async () => await Capture("monitor"));
-        Register("record", app.Settings.RecordHotkey, async () => { if (recording is not null) await recording.Stop(); else await SetupRecording("region"); });
+        if (registerHotkeys)
+            foreach (var binding in HotkeyBindings(app.Settings))
+            {
+                var result = hotkeys?.Register(binding.Id, binding.Gesture, binding.Callback);
+                if (result is not null) issues.Add(result);
+            }
         Status.Text = issues.Count == 0 ? "Ready" : string.Join("  ", issues);
+    }
+
+    private HotkeyBinding[] HotkeyBindings(AppSettings settings) =>
+    [
+        new("region", settings.RegionHotkey, async () => await Capture("region")),
+        new("window", settings.WindowHotkey, async () => await Capture("active")),
+        new("monitor", settings.MonitorHotkey, async () => await Capture("monitor")),
+        new("record", settings.RecordHotkey, async () => { if (recording is not null) await recording.Stop(); else await SetupRecording("region"); })
+    ];
+
+    private void ApplySettings(AppSettings draft)
+    {
+        if (hotkeys is null) throw new InvalidOperationException("The shortcut host is not ready.");
+        var error = hotkeys.Apply(HotkeyBindings(draft), () => app.Store.Save(draft));
+        if (error is not null) throw new InvalidOperationException(error);
+        app.Settings = draft;
+        Configure(registerHotkeys: false);
+        RefreshRecent();
     }
 
     private void CreateTray()
@@ -65,12 +84,12 @@ public partial class MainWindow : Window
     private async Task Capture(string mode)
     {
         if (capturing || recording is not null) { Status.Text = "Finish the current recording before taking a screenshot."; return; }
-        CaptureTarget? active = mode == "active" ? CaptureService.GetActiveWindow() : null;
-        if (!CanReplaceImage()) return;
         capturing = true;
         var wasVisible = IsVisible;
         try
         {
+            CaptureTarget? active = mode == "active" ? CaptureService.GetActiveWindow() : null;
+            if (!CanReplaceImage()) return;
             Hide(); await Task.Delay(180 + app.Settings.CaptureDelaySeconds * 1000);
             var target = mode switch
             {
@@ -82,8 +101,8 @@ public partial class MainWindow : Window
             };
             if (target is null) return;
             var image = CaptureService.Capture(target);
-            currentPath = null;
             Editor.LoadImage(image); Editor.ApplyDefaults(app.Settings.EditorColor, app.Settings.EditorStroke);
+            currentPath = null;
             List<string> actionErrors = [];
             if (app.Settings.CopyAfterCapture)
             {
@@ -114,7 +133,7 @@ public partial class MainWindow : Window
         if (!CanReplaceImage()) return;
         try
         {
-            var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad; image.UriSource = new Uri(Path.GetFullPath(path)); image.EndInit(); image.Freeze();
+            var image = SafeImageLoader.Load(path);
             Editor.LoadImage(image, path); currentPath = path; Editor.ApplyDefaults(app.Settings.EditorColor, app.Settings.EditorStroke); ShowMain(); ShowPage("editor"); Status.Text = Path.GetFileName(path) + $" · {image.PixelWidth} × {image.PixelHeight}";
         }
         catch (Exception ex) { ShowError(ex); }
@@ -134,7 +153,7 @@ public partial class MainWindow : Window
         {
             var image = Clipboard.GetImage();
             if (image is null) { Status.Text = "The clipboard does not contain an image."; return; }
-            currentPath = null; Editor.LoadImage(image); Editor.ApplyDefaults(app.Settings.EditorColor, app.Settings.EditorStroke); ShowPage("editor"); Status.Text = "Pasted image";
+            Editor.LoadImage(image); currentPath = null; Editor.ApplyDefaults(app.Settings.EditorColor, app.Settings.EditorStroke); ShowPage("editor"); Status.Text = "Pasted image";
         }
         catch (Exception ex) { ShowError(ex); }
         await Task.CompletedTask;
@@ -238,7 +257,7 @@ public partial class MainWindow : Window
     private void EditorClick(object sender, RoutedEventArgs e) => ShowPage("editor");
     private void ClipsClick(object sender, RoutedEventArgs e) => ShowPage("clips");
     private void SettingsClick(object sender, RoutedEventArgs e) => ShowSettings("General");
-    private void ShowSettings(string category) { var window = new SettingsWindow(app.Settings, category) { Owner = this }; if (window.ShowDialog() == true) { app.Settings = window.Result; Configure(); RefreshRecent(); } }
+    private void ShowSettings(string category) { var window = new SettingsWindow(app.Settings, ApplySettings, category) { Owner = this }; window.ShowDialog(); }
     private void FolderClick(object sender, RoutedEventArgs e) { try { Directory.CreateDirectory(app.Settings.OutputDirectory); Process.Start(new ProcessStartInfo(app.Settings.OutputDirectory) { UseShellExecute = true }); } catch (Exception ex) { ShowError(ex); } }
     private void OnDrop(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files) OpenFile(files[0]); }
     private void OnKeyDown(object sender, KeyEventArgs e)

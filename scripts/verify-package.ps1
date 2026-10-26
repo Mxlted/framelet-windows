@@ -24,7 +24,16 @@ foreach ($line in Get-Content -LiteralPath $manifestPath) {
 $actualCount = @(Get-ChildItem -LiteralPath $verificationDirectory -Recurse -File).Count - 1
 if ($actualCount -ne $count) { throw 'Package contains files not accounted for in its hash manifest.' }
 if (Get-ChildItem -LiteralPath $verificationDirectory -Filter 'ffmpeg*.exe' -Recurse) { throw 'FFmpeg must remain an explicitly configured optional dependency.' }
-foreach ($name in @('Framelet.exe', 'Framelet.NativeHost.exe', 'ScreenRecorderLib.dll', 'msvcp140.dll', 'vcruntime140.dll', 'Framelet.runtimeconfig.json', 'licenses/ScreenRecorderLib-LICENSE.txt')) {
+foreach ($name in @('Framelet.exe', 'Framelet.NativeHost.exe', 'Framelet.NativeHost.runtimeconfig.json', 'ScreenRecorderLib.dll',
+    'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'concrt140.dll', 'coreclr.dll', 'hostfxr.dll', 'hostpolicy.dll', 'PresentationFramework.dll',
+    'Framelet.runtimeconfig.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'licenses/ScreenRecorderLib-LICENSE.txt',
+    'licenses/MICROSOFT-VC-RUNTIME.txt', 'licenses/Microsoft.NETCore.App-LICENSE.txt', 'licenses/Microsoft.WindowsDesktop.App-LICENSE.txt')) {
     if (!(Test-Path -LiteralPath (Join-Path $verificationDirectory $name))) { throw "Required package file is missing: $name" }
+}
+foreach ($config in @('Framelet.runtimeconfig.json', 'Framelet.NativeHost.runtimeconfig.json')) {
+    $runtime = Get-Content -LiteralPath (Join-Path $verificationDirectory $config) -Raw | ConvertFrom-Json
+    if (!$runtime.runtimeOptions.includedFrameworks -or $runtime.runtimeOptions.framework -or $runtime.runtimeOptions.frameworks) {
+        throw "$config does not describe a self-contained runtime."
+    }
 }
 Write-Host "Verified $count package file hashes. No FFmpeg executable is bundled."

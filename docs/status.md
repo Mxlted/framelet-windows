@@ -6,7 +6,17 @@ The first preview is a functional Windows application, not a finished replacemen
 
 Region, visible-window, monitor and virtual-desktop screenshots; frozen per-monitor selector; configurable global hotkeys; tray; disk/clipboard image loading; annotated image export; automatic capture actions; atomic settings; dark/light/system theme. The editor retains movable/resizable annotations, layer order, text edits, crop/resize, undo/redo, blur and pixelation. Native recording and optional FFmpeg recording have separate concrete pipelines. Native supports system and mic endpoints, pause/resume, finalization, cancel/restart, and worker isolation. Clip preview, exact and keyframe trim, compression and WebM export are included.
 
-## Actual validation on October 26, 2026
+## Audit fixes validated on October 26, 2026
+
+All eight confirmed audit findings are implemented: recording recovery through disposal, correct translucent effects, image size checks before full decoding, painted crop bounds, denied-access settings recovery, refreshed delayed window geometry, transactional hotkeys, and asynchronous scaled effect previews. [Implementation, files, regressions, commands and measurements](audit-fixes.md).
+
+- `scripts/build.ps1` and the full x64 Release solution build pass with zero warnings and errors. `scripts/test.ps1` passes 141 checks: Core 44, Editor 54, Capture 16, Recording 17, Session 10.
+- FFmpeg integration passes 52 checks (44 base plus eight integrations), including a real late collision and full recovery/Save As decode. The native live suite passes 26 checks with an empty PATH, including pause/resume, audio, cancellation, natural completion, both recovery cases, worker failure and external recovery decoding. The desktop-capture suite passes 19 checks including a moved/resized synthetic window, unavailable targets, and preserved frozen snapshots.
+- All seven real MP4 outputs from the final native run fully decode externally, including both recovery files and the alternate saved copy. This inspection is separate from native recording dependencies. The audio clip contains 151 video frames over 2.516650 seconds and stereo 48 kHz AAC over 2.538646 seconds; the roughly 22 ms endpoint difference is short-run evidence, not a long-term synchronization guarantee. The requested-120-FPS clip contains 193 frames over 2.015208 seconds (about 95.8 encoded frames/second), not 120 unique FPS.
+- The same warmed 4K blur preview workload at 10% zoom changed from 367.87–530.68 ms on the UI thread to 0.02–2.80 ms. Background preview readiness takes 46.05–67.48 ms including coalescing. Exact commit/export remains full resolution.
+- A fresh diagnostic portable ZIP and installer compiled successfully; 513 package hashes and worker, self-contained .NET/WPF, app-local CRT and notice checks passed. No install/uninstall, commit, push, tag or publication was performed during this implementation. The initial-preview installation evidence below is historical.
+
+## Initial preview validation on October 26, 2026
 
 - The full x64 Release solution builds with zero warnings and errors on .NET SDK 10.0.403 / Windows 11 build 26300.
 - All 80 deterministic checks passed, covering settings/defaults/backend selection, safe filenames and file collisions, FFmpeg argument boundaries, clip validation, editor pixels and object history, capture geometry and hotkey parsing, native failure handling, and recording-session races. The final combined run passed 88 checks with the seven FFmpeg integration checks and one live desktop-capture check enabled; the separate native live suite is detailed below.

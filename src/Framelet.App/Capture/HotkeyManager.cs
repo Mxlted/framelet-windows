@@ -5,6 +5,8 @@ using System.Windows.Interop;
 
 namespace Framelet.App.Capture;
 
+public sealed record HotkeyBinding(string Id, string Gesture, Action Callback);
+
 public sealed class HotkeyManager : IDisposable
 {
     private readonly HwndSource _source;
@@ -21,21 +23,71 @@ public sealed class HotkeyManager : IDisposable
     }
 
     public string? Register(string id, string gesture, Action callback)
+        => Apply([new(id, gesture, callback)]);
+
+    /// <summary>Updates only the specified actions. Reserve new pairs before saving or releasing any old pair.</summary>
+    public string? Apply(IReadOnlyList<HotkeyBinding> changes, Action? persist = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(callback);
-        if (!TryParse(gesture, out uint modifiers, out uint key, out string? error)) return error;
-        if (_registrations.TryGetValue(id, out var current) && current.Modifiers == modifiers && current.Key == key)
+        _source.Dispatcher.VerifyAccess();
+        var desired = _registrations.ToDictionary(x => x.Key, x => (x.Value.Modifiers, x.Value.Key, x.Value.Action), StringComparer.Ordinal);
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var change in changes)
         {
-            _registrations[id] = (current.NativeId, modifiers, key, callback);
+            ArgumentNullException.ThrowIfNull(change.Callback);
+            if (!ids.Add(change.Id)) return "Each action can only be configured once.";
+            if (string.IsNullOrWhiteSpace(change.Gesture)) { desired.Remove(change.Id); continue; }
+            if (!TryParse(change.Gesture, out uint modifiers, out uint key, out string? error)) return error;
+            desired[change.Id] = (modifiers, key, change.Callback);
+        }
+        if (desired.Values.Select(x => (x.Modifiers, x.Key)).Distinct().Count() != desired.Count)
+            return "Each action needs a different hotkey (equivalent modifier/key combinations count as duplicates).";
+
+        var existing = _registrations.Values.ToDictionary(x => (x.Modifiers, x.Key), x => x.NativeId);
+        var reserved = new Dictionary<(uint Modifiers, uint Key), int>();
+        bool committed = false;
+        try
+        {
+            foreach (var pair in desired.Values.Select(x => (x.Modifiers, x.Key)))
+            {
+                if (existing.ContainsKey(pair)) continue; // Swaps only change the callback owning an existing pair.
+                int nativeId = NextNativeId(reserved.Values);
+                if (!CaptureNative.RegisterHotKey(_source.Handle, nativeId, pair.Modifiers | 0x4000, pair.Key))
+                {
+                    var gesture = changes.First(x => TryParse(x.Gesture, out var m, out var k, out _) && (m, k) == pair).Gesture;
+                    return $"{gesture} is already used by Windows or another application. Your previous shortcuts and settings were kept.";
+                }
+                reserved.Add(pair, nativeId);
+            }
+            var next = desired.ToDictionary(x => x.Key, x =>
+            {
+                var pair = (x.Value.Modifiers, x.Value.Key);
+                return (NativeId: existing.TryGetValue(pair, out int id) ? id : reserved[pair], x.Value.Modifiers, x.Value.Key, x.Value.Action);
+            }, StringComparer.Ordinal);
+            // If persistence fails, no previous native registration or callback has changed.
+            persist?.Invoke();
+            foreach (var old in _registrations.Values)
+                if (!next.Values.Any(x => x.NativeId == old.NativeId)) CaptureNative.UnregisterHotKey(_source.Handle, old.NativeId);
+            _registrations.Clear();
+            foreach (var item in next) _registrations.Add(item.Key, item.Value);
+            committed = true;
             return null;
         }
-        int nativeId = ++_nextId;
-        if (!CaptureNative.RegisterHotKey(_source.Handle, nativeId, modifiers | 0x4000, key))
-            return $"{gesture} is already used by Windows or another application. Choose a different shortcut.";
-        if (_registrations.Remove(id, out var previous)) CaptureNative.UnregisterHotKey(_source.Handle, previous.NativeId);
-        _registrations.Add(id, (nativeId, modifiers, key, callback));
-        return null;
+        finally
+        {
+            if (!committed) foreach (int id in reserved.Values) CaptureNative.UnregisterHotKey(_source.Handle, id);
+        }
+    }
+
+    private int NextNativeId(IEnumerable<int> reserved)
+    {
+        // Application hotkey identifiers are restricted to 0x0000..0xBFFF.
+        for (int attempt = 0; attempt < 0x7F00; attempt++)
+        {
+            _nextId = _nextId >= 0xBFFF ? 0x4100 : _nextId + 1;
+            if (!_registrations.Values.Any(x => x.NativeId == _nextId) && !reserved.Contains(_nextId)) return _nextId;
+        }
+        throw new InvalidOperationException("No hotkey identifiers are available.");
     }
 
     public void UnregisterAll()
@@ -70,11 +122,17 @@ public sealed class HotkeyManager : IDisposable
     private nint WndProc(nint window, int message, nint wParam, nint lParam, ref bool handled)
     {
         if (message != 0x0312) return 0;
-        foreach (var item in _registrations.Values)
+        foreach (var registration in _registrations)
         {
+            var item = registration.Value;
             if (item.NativeId != (int)wParam) continue;
             handled = true;
-            _source.Dispatcher.BeginInvoke(item.Action);
+            _source.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // A queued keypress must not invoke a removed, reassigned, or disposed action.
+                if (!_disposed && _registrations.TryGetValue(registration.Key, out var current) && current == item)
+                    item.Action();
+            }));
             break;
         }
         return 0;

@@ -11,6 +11,7 @@ A focused Windows workspace for screenshots, image annotation, and short video c
 - Region, window, monitor, and all-display screenshots, configurable global hotkeys, clipboard integration, automatic saving, and filename patterns.
 - Image editor with crop, resize, arrows, rectangles, ellipses, text, pen, highlight, blur, pixelation, object selection/movement/resizing, layer order, and undo/redo. Open files, paste images, or edit a fresh capture.
 - Native WGC recording with H.264/AAC MP4, system audio and microphone device selection, requested hardware encoding, cursor control, pause/resume, stop, cancel, and restart.
+- Completed recordings survive a failed final save. The recording window shows the recovery path and offers **Save recording as…** without replacing existing files.
 - Optional FFmpeg recording with codec choices and encoding parameters. **Settings → Recording → Use FFmpeg for recording** is off by default and switches the actual engine.
 - Clip playback and trimming, exact re-encoding, keyframe-based lossless trimming, MP4 compression, and WebM conversion. Clip export uses FFmpeg independently of the recording checkbox.
 - Neutral dark/light themes, system tray actions, and workflow-based settings.
@@ -32,6 +33,8 @@ Install the .NET 10 SDK and use PowerShell on Windows:
 ```
 
 Packaging uses Inno Setup when installed and app-local VC++ runtime files from Visual Studio. It never downloads dependencies silently. Test scripts explain the opt-in interactive capture/audio tests.
+
+For a diagnostic package in a fresh directory, pass `-OutputDirectory artifacts/package-check/<unique-name>` to `scripts/package.ps1`. This keeps the existing release artifacts untouched. [Audit fixes and validation](docs/audit-fixes.md).
 
 WPF owns the UI/editor. The native recording host wraps the MIT-licensed ScreenRecorderLib; FFmpeg recording and processing are separate components. This is an independent project, not a ShareX fork, and includes no ShareX source or assets. [Architecture and research](docs/architecture.md) · [Native pipeline](docs/native-recording.md) · [Third-party notices](THIRD_PARTY_NOTICES.md).
 
