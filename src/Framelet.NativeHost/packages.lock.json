@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows10.0.22621": {
+      "ScreenRecorderLib": {
+        "type": "Transitive",
+        "resolved": "7.0.1",
+        "contentHash": "QwDAc3IpTgjaRAw3HLLc+pnznQp+D5W3us9VckpPPasszpCOs5C1lAScc6AOGaEtssjSlKfHKHeI61p4djWXOA=="
+      },
+      "framelet.core": {
+        "type": "Project"
+      },
+      "framelet.recording": {
+        "type": "Project",
+        "dependencies": {
+          "Framelet.Core": "[0.1.0, )",
+          "ScreenRecorderLib": "[7.0.1, )"
+        }
+      }
+    }
+  }
+}
