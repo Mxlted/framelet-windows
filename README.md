@@ -36,6 +36,8 @@ Packaging uses Inno Setup when installed and app-local VC++ runtime files from V
 
 For a diagnostic package in a fresh directory, pass `-OutputDirectory artifacts/package-check/<unique-name>` to `scripts/package.ps1`. This keeps the existing release artifacts untouched. [Audit fixes and validation](docs/audit-fixes.md).
 
+The [UI/UX polish prompt](docs/prompts/ui-ux-polish.md) defines the next focused design and implementation pass, including live UI inspection, accessibility, DPI, and preservation of the audit fixes.
+
 WPF owns the UI/editor. The native recording host wraps the MIT-licensed ScreenRecorderLib; FFmpeg recording and processing are separate components. This is an independent project, not a ShareX fork, and includes no ShareX source or assets. [Architecture and research](docs/architecture.md) · [Native pipeline](docs/native-recording.md) · [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 MIT licensed. See [LICENSE](LICENSE).

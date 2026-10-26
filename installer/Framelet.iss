@@ -1,8 +1,8 @@
 #ifndef AppVersion
-  #define AppVersion "0.1.0-preview.1"
+  #define AppVersion "0.2.0-preview.1"
 #endif
 #ifndef FileVersion
-  #define FileVersion "0.1.0"
+  #define FileVersion "0.2.0"
 #endif
 #ifndef SourcePath
   #error SourcePath must point to a validated publish directory.

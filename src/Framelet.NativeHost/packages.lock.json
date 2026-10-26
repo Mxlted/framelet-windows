@@ -13,7 +13,7 @@
       "framelet.recording": {
         "type": "Project",
         "dependencies": {
-          "Framelet.Core": "[0.1.0, )",
+          "Framelet.Core": "[0.2.0, )",
           "ScreenRecorderLib": "[7.0.1, )"
         }
       }
