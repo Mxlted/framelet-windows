@@ -1,5 +1,13 @@
 # Third-party notices
 
+## .NET and Microsoft Visual C++ runtime distribution
+
+Self-contained Windows packages include the .NET runtime and Windows Desktop runtime under their upstream licenses. The package's `licenses` directory includes each runtime's license and third-party notices. App-local Microsoft Visual C++ release runtime DLLs are redistributed unmodified from Visual Studio's redistributable directory; see `licenses/MICROSOFT-VC-RUNTIME.txt` in the package.
+
+## FFmpeg
+
+FFmpeg is not distributed with Framelet. It is an optional user-provided executable. Its license and codec configuration depend on the build the user installs; see https://ffmpeg.org/legal.html. Native recording has no FFmpeg dependency.
+
 ## ScreenRecorderLib 7.0.1
 
 Framelet distributes ScreenRecorderLib.dll from the pinned NuGet package. Source: https://github.com/sskodje/ScreenRecorderLib. License source: the package LICENSE file and https://github.com/sskodje/ScreenRecorderLib/blob/master/LICENSE.

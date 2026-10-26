@@ -1,0 +1,18 @@
+Microsoft Visual C++ runtime libraries
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+The application package includes unmodified x64 release CRT DLLs from a licensed
+Visual Studio 2022 installation's VC\Redist\MSVC directory. These Microsoft
+components remain under their own license and are not covered by Framelet's MIT
+license. No debug or non-redistributable files are included.
+
+Applicable license terms:
+https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/
+https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+
+Local deployment guidance:
+https://learn.microsoft.com/en-us/cpp/windows/determining-which-dlls-to-redistribute
+
+These DLLs are private to Framelet and are not installed system-wide. Framelet
+releases are responsible for servicing this bundled copy. Windows Universal CRT
+system libraries are supplied by Windows and are not redistributed in this package.
