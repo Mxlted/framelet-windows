@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Version>0.1.0</Version>
+    <Authors>Mxlted</Authors>
+    <Copyright>Copyright © 2026 Framelet contributors</Copyright>
+    <RepositoryUrl>https://github.com/Mxlted/framelet-windows</RepositoryUrl>
+    <Deterministic>true</Deterministic>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>
