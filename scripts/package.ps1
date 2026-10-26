@@ -23,16 +23,23 @@ foreach ($output in @($portablePath, $installerPath, $hashPath)) {
 
 if (!$VCRuntimeDirectory) {
     # Only the documented, redistributable release CRT folder is eligible. Never copy System32 or debug DLLs.
-    $visualStudioRoot = Join-Path ${env:ProgramFiles} 'Microsoft Visual Studio/2022'
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+    $installations = @()
+    if (Test-Path -LiteralPath $vswhere) {
+        $installations = @(& $vswhere -products '*' -version '[17.0,19.0)' -property installationPath)
+        if ($LASTEXITCODE -ne 0) { throw 'Visual Studio discovery failed. Supply -VCRuntimeDirectory explicitly.' }
+    }
     $candidates = @()
-    if (Test-Path -LiteralPath $visualStudioRoot) {
-        foreach ($edition in Get-ChildItem -LiteralPath $visualStudioRoot -Directory) {
-            $redistRoot = Join-Path $edition.FullName 'VC/Redist/MSVC'
-            if (!(Test-Path -LiteralPath $redistRoot)) { continue }
-            foreach ($versionDirectory in Get-ChildItem -LiteralPath $redistRoot -Directory) {
-                if ($versionDirectory.Name -notmatch '^\d+\.\d+\.\d+$') { continue }
-                $crt = Join-Path $versionDirectory.FullName 'x64/Microsoft.VC143.CRT'
-                if (Test-Path -LiteralPath (Join-Path $crt 'msvcp140.dll')) {
+    foreach ($installation in $installations) {
+        if ([string]::IsNullOrWhiteSpace($installation)) { continue }
+        $redistRoot = Join-Path $installation.Trim() 'VC/Redist/MSVC'
+        if (!(Test-Path -LiteralPath $redistRoot)) { continue }
+        foreach ($versionDirectory in Get-ChildItem -LiteralPath $redistRoot -Directory) {
+            if ($versionDirectory.Name -notmatch '^14\.\d+\.\d+$') { continue }
+            foreach ($family in @('Microsoft.VC143.CRT', 'Microsoft.VC145.CRT')) {
+                $crt = Join-Path $versionDirectory.FullName "x64/$family"
+                if ((Test-Path -LiteralPath (Join-Path $crt 'msvcp140.dll')) -and
+                    (Test-Path -LiteralPath (Join-Path $crt 'vcruntime140.dll'))) {
                     $candidates += [pscustomobject]@{ Version = [version]$versionDirectory.Name; Path = $crt }
                 }
             }
@@ -41,12 +48,13 @@ if (!$VCRuntimeDirectory) {
     $VCRuntimeDirectory = ($candidates | Sort-Object Version -Descending | Select-Object -First 1).Path
 }
 if (!$VCRuntimeDirectory -or !(Test-Path -LiteralPath (Join-Path $VCRuntimeDirectory 'vcruntime140.dll'))) {
-    throw 'Install the Visual Studio 2022 C++ redistributable build components, or supply -VCRuntimeDirectory pointing to the licensed x64 Microsoft.VC143.CRT release folder. Nothing is downloaded automatically.'
+    throw 'Install the Visual Studio 2022 or 2026 C++ redistributable build components, or supply -VCRuntimeDirectory pointing to a licensed x64 Microsoft.VC143.CRT or Microsoft.VC145.CRT release folder. Nothing is downloaded automatically.'
 }
 $VCRuntimeDirectory = (Resolve-Path -LiteralPath $VCRuntimeDirectory).Path
-if ($VCRuntimeDirectory -match 'debug_nonredist|onecore' -or $VCRuntimeDirectory -notmatch '[\\/]x64[\\/]Microsoft\.VC143\.CRT$') {
-    throw 'VCRuntimeDirectory must be the standard x64 Microsoft.VC143.CRT release redistributable directory.'
+if ($VCRuntimeDirectory -match 'debug_nonredist|onecore' -or $VCRuntimeDirectory -notmatch '[\\/]VC[\\/]Redist[\\/]MSVC[\\/]14\.\d+\.\d+[\\/]x64[\\/]Microsoft\.VC14[35]\.CRT$') {
+    throw 'VCRuntimeDirectory must be a standard x64 VC143 or VC145 release folder under Visual Studio VC/Redist/MSVC.'
 }
+Write-Host "App-local Visual C++ runtime: $VCRuntimeDirectory"
 
 if (!$PortableOnly -and !$InnoCompiler) {
     $locations = @((Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'), (Join-Path $env:LOCALAPPDATA 'Programs/Inno Setup 6/ISCC.exe'))

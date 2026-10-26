@@ -2,13 +2,14 @@ Microsoft Visual C++ runtime libraries
 Copyright (c) Microsoft Corporation. All rights reserved.
 
 The application package includes unmodified x64 release CRT DLLs from a licensed
-Visual Studio 2022 installation's VC\Redist\MSVC directory. These Microsoft
+Visual Studio 2022 or 2026 installation's VC\Redist\MSVC directory. These Microsoft
 components remain under their own license and are not covered by Framelet's MIT
 license. No debug or non-redistributable files are included.
 
 Applicable license terms:
-https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/
+https://visualstudio.microsoft.com/license-terms/
 https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution
+https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution
 
 Local deployment guidance:
 https://learn.microsoft.com/en-us/cpp/windows/determining-which-dlls-to-redistribute

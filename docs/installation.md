@@ -26,18 +26,18 @@ Use `-FfmpegIntegration` to additionally exercise an installed FFmpeg against ge
 
 ## Packaging
 
-Install Inno Setup 6 and the Visual Studio 2022 C++ redistributable build components explicitly, then run:
+Install Inno Setup 6 and the Visual Studio 2022 or 2026 C++ redistributable build components explicitly, then run:
 
 ```powershell
 ./scripts/package.ps1 -Version 0.1.0-preview.1
 ```
 
-The script publishes both the application and isolated native worker as self-contained win-x64 applications, copies only the licensed release CRT DLLs, includes dependency notices, creates the ZIP and per-user installer, and verifies every ZIP entry against its SHA-256 manifest. It does not download or install packaging tools. Use `-PortableOnly` to omit Inno Setup, `-InnoCompiler` for a custom compiler location, and `-VCRuntimeDirectory` for a custom licensed x64 `Microsoft.VC143.CRT` directory. Existing named release artifacts require explicit `-Force` replacement.
+The script publishes both the application and isolated native worker as self-contained win-x64 applications, copies only the licensed release CRT DLLs, includes dependency notices, creates the ZIP and per-user installer, and verifies every ZIP entry against its SHA-256 manifest. It does not download or install packaging tools. Visual Studio installations are located with Microsoft's `vswhere`; the newest installed release CRT is selected. Use `-PortableOnly` to omit Inno Setup, `-InnoCompiler` for a custom compiler location, and `-VCRuntimeDirectory` to select a licensed x64 `Microsoft.VC143.CRT` or `Microsoft.VC145.CRT` folder under `VC/Redist/MSVC`. Existing named release artifacts require explicit `-Force` replacement.
 
 Outputs go to `artifacts/releases`. Unpacked publish and verification directories remain under `artifacts` for inspection. `SHA256SUMS.txt` inside the ZIP covers package contents; the release hash file covers the ZIP and installer.
 
 With Framelet fully closed, `./scripts/check-installer.ps1 -Installer <setup.exe>` validates installation and uninstallation in a fresh `artifacts/installer-check` directory. It refuses to run if this user already has a registered Framelet installation, preserves user-created files, and checks that existing settings remain unchanged.
 
-Microsoft allows redistribution of unmodified release runtime files from the licensed Visual Studio redist directory. App-local deployment avoids a machine-wide prerequisite, but makes Framelet responsible for distributing runtime updates. See [Microsoft's redistribution list](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution) and [deployment guidance](https://learn.microsoft.com/en-us/cpp/windows/determining-which-dlls-to-redistribute).
+Microsoft allows redistribution of unmodified release runtime files from the licensed Visual Studio redist directory. App-local deployment avoids a machine-wide prerequisite, but makes Framelet responsible for distributing runtime updates. See Microsoft's [2022 redistribution list](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution), [2026 redistribution list](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution), and [deployment guidance](https://learn.microsoft.com/en-us/cpp/windows/determining-which-dlls-to-redistribute). The v145 runtime remains compatible with v143 native dependencies under Microsoft's [C++ binary compatibility rules](https://learn.microsoft.com/en-us/cpp/porting/binary-compat-2015-2017).
 
 The Windows workflow builds, tests, and packages every main-branch change and pull request. Version tags create a **draft prerelease** for review; the workflow does not publish it automatically or replace an existing release. Hosted tests do not validate GPU capture, actual audio synchronization, or interactive UI behavior.
