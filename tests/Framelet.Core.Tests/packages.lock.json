@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "framelet.core": {
+        "type": "Project"
+      },
+      "framelet.media": {
+        "type": "Project",
+        "dependencies": {
+          "Framelet.Core": "[0.1.0, )"
+        }
+      }
+    }
+  }
+}

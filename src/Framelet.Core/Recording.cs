@@ -34,6 +34,7 @@ public interface IRecordingBackend : IAsyncDisposable
     bool CanPause { get; }
     event Action<string>? StatusChanged;
     event Action<Exception>? Failed;
+    event Action? Completed;
     Task StartAsync(RecordingRequest request, CancellationToken ct = default);
     Task PauseAsync();
     Task ResumeAsync();
