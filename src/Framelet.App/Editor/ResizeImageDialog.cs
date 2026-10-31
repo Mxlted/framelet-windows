@@ -1,6 +1,6 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
-using System.Windows.Media;
 
 namespace Framelet.App.Editor;
 
@@ -19,13 +19,13 @@ internal sealed class ResizeImageDialog : Window
     {
         SetResourceReference(StyleProperty, typeof(Window));
         Title = "Resize image";
-        Width = 390; Height = 305; ResizeMode = ResizeMode.NoResize;
+        Width = 390; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ShowInTaskbar = false;
         SetResourceReference(BackgroundProperty, "SurfaceBrush");
         SetResourceReference(ForegroundProperty, "TextBrush");
         _ratio = (double)width / height;
-        var panel = new StackPanel { Margin = new Thickness(24) };
+        var panel = new StackPanel { Margin = new Thickness(20) };
         panel.Children.Add(new TextBlock { Text = "Resize image", FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 18) });
         var fields = new Grid();
         fields.ColumnDefinitions.Add(new ColumnDefinition());
@@ -33,22 +33,31 @@ internal sealed class ResizeImageDialog : Window
         fields.ColumnDefinitions.Add(new ColumnDefinition());
         _width = new TextBox { Text = width.ToString(), Height = 34, VerticalContentAlignment = VerticalAlignment.Center };
         _height = new TextBox { Text = height.ToString(), Height = 34, VerticalContentAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetName(_width, "Width in image pixels");
+        AutomationProperties.SetName(_height, "Height in image pixels");
         var widthPanel = new StackPanel();
-        widthPanel.Children.Add(new TextBlock { Text = "Width (px)", Margin = new Thickness(0, 0, 0, 6) });
+        var widthLabel = new Label { Content = "_Width (px)", Target = _width, Padding = new Thickness(0, 0, 0, 6) };
+        widthLabel.SetResourceReference(ForegroundProperty, "TextBrush");
+        widthPanel.Children.Add(widthLabel);
         widthPanel.Children.Add(_width);
         var heightPanel = new StackPanel();
-        heightPanel.Children.Add(new TextBlock { Text = "Height (px)", Margin = new Thickness(0, 0, 0, 6) });
+        var heightLabel = new Label { Content = "_Height (px)", Target = _height, Padding = new Thickness(0, 0, 0, 6) };
+        heightLabel.SetResourceReference(ForegroundProperty, "TextBrush");
+        heightPanel.Children.Add(heightLabel);
         heightPanel.Children.Add(_height);
         Grid.SetColumn(heightPanel, 2);
         fields.Children.Add(widthPanel); fields.Children.Add(heightPanel);
         panel.Children.Add(fields);
         _lock = new CheckBox { Content = "Keep proportions", IsChecked = true, Margin = new Thickness(0, 14, 0, 10) };
         panel.Children.Add(_lock);
-        _error = new TextBlock { Foreground = new SolidColorBrush(Color.FromRgb(237, 123, 105)), FontSize = 11, TextWrapping = TextWrapping.Wrap, Height = 34 };
+        _error = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12), Visibility = Visibility.Collapsed };
+        _error.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
+        AutomationProperties.SetLiveSetting(_error, AutomationLiveSetting.Polite);
         panel.Children.Add(_error);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         var cancel = new Button { Content = "Cancel", IsCancel = true, Padding = new Thickness(16, 7, 16, 7), Margin = new Thickness(0, 0, 8, 0) };
         var apply = new Button { Content = "Resize", IsDefault = true, Padding = new Thickness(16, 7, 16, 7) };
+        apply.SetResourceReference(StyleProperty, "PrimaryButton");
         apply.Click += (_, _) => Apply();
         actions.Children.Add(cancel); actions.Children.Add(apply);
         panel.Children.Add(actions);
@@ -73,12 +82,18 @@ internal sealed class ResizeImageDialog : Window
     {
         if (!int.TryParse(_width.Text, out int width) || !int.TryParse(_height.Text, out int height))
         {
-            _error.Text = "Enter whole numbers for both dimensions.";
+            ShowError("Enter whole numbers for both dimensions.");
             return;
         }
         try { ImageDocument.ValidateDimensions(width, height); }
-        catch (ArgumentOutOfRangeException) { _error.Text = "Use 1–16,384 pixels per side, up to 64 megapixels."; return; }
+        catch (ArgumentOutOfRangeException) { ShowError("Use 1–16,384 pixels per side, up to 64 megapixels."); return; }
         ImageWidth = width; ImageHeight = height;
         DialogResult = true;
+    }
+
+    private void ShowError(string message)
+    {
+        _error.Text = message;
+        _error.Visibility = Visibility.Visible;
     }
 }

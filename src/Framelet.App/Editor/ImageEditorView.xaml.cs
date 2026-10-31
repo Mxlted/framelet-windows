@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -10,7 +12,19 @@ namespace Framelet.App.Editor;
 
 public partial class ImageEditorView : UserControl
 {
-    private sealed record ObjectItem(Guid Id, string Label);
+    private sealed class ObjectItem(Guid id) : INotifyPropertyChanged
+    {
+        public Guid Id { get; } = id;
+        public string Label { get; private set; } = string.Empty;
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public void UpdateLabel(string label)
+        {
+            if (Label == label) return;
+            Label = label;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Label)));
+        }
+    }
     private ImageDocument? _document;
     private bool _ready;
     private bool _synchronizing;
@@ -104,16 +118,30 @@ public partial class ImageEditorView : UserControl
         EmptyState.Visibility = HasImage ? Visibility.Collapsed : Visibility.Visible;
         CanvasHost.Visibility = HasImage ? Visibility.Visible : Visibility.Collapsed;
         ToolRail.IsEnabled = HasImage;
+        PropertyOptions.IsEnabled = HasImage;
+        ResizeButton.IsEnabled = HasImage;
+        ZoomControls.IsEnabled = HasImage;
+        if (!HasImage) StatusLabel.Text = "Open, paste or capture an image to begin.";
         UndoButton.IsEnabled = _document?.CanUndo == true;
         RedoButton.IsEnabled = _document?.CanRedo == true;
         DimensionsLabel.Text = _document == null ? "No image" : $"{_document.Width:N0} × {_document.Height:N0} px";
         ObjectCount.Text = _document == null || _document.Annotations.Count == 0 ? "No annotations yet" :
             $"{_document.Annotations.Count} editable {(_document.Annotations.Count == 1 ? "object" : "objects")}";
         _synchronizing = true;
-        var selected = Surface.Selected?.Id;
-        ObjectList.ItemsSource = _document?.Annotations.Reverse().Select((a, index) => new ObjectItem(a.Id,
-            a.Tool == EditorTool.Text ? $"T   {a.Text.Replace('\n', ' ').Trim()}" : $"{ToolLabel(a.Tool)}  {_document.Annotations.Count - index}")).ToArray();
-        ObjectList.SelectedItem = ObjectList.Items.Cast<ObjectItem>().FirstOrDefault(item => item.Id == selected);
+        var annotations = _document?.Annotations.Reverse().ToArray() ?? [];
+        var items = ObjectList.Items.Cast<ObjectItem>().ToArray();
+        // Property edits retain row identity, selection and the user's scroll position.
+        if (!items.Select(item => item.Id).SequenceEqual(annotations.Select(annotation => annotation.Id)))
+        {
+            items = annotations.Select(annotation => new ObjectItem(annotation.Id)).ToArray();
+            ObjectList.ItemsSource = items;
+        }
+        for (int index = 0; index < annotations.Length; index++)
+        {
+            var annotation = annotations[index];
+            items[index].UpdateLabel(annotation.Tool == EditorTool.Text ? $"T   {annotation.Text.Replace('\n', ' ').Trim()}" :
+                $"{ToolLabel(annotation.Tool)}  {annotations.Length - index}");
+        }
         _synchronizing = false;
         RefreshSelection();
     }
@@ -125,13 +153,21 @@ public partial class ImageEditorView : UserControl
         var selected = Surface.Selected;
         var effective = selected?.Tool ?? Surface.Tool;
         ToolTitle.Text = ToolLabel(effective);
+        PropertyScope.Text = !HasImage ? "No image" : selected != null ? "Selected object" : effective == EditorTool.Select ? "Selection" : "Tool defaults";
+        PropertyScope.ToolTip = selected != null ? "These properties edit the selected object and are also used for the next object." : "Properties for the next annotation you draw.";
         bool crop = Surface.Tool == EditorTool.Crop;
         bool effect = effective is EditorTool.Blur or EditorTool.Pixelate;
         bool text = effective == EditorTool.Text;
-        StyleOptions.Visibility = crop || effect ? Visibility.Collapsed : Visibility.Visible;
+        bool selectionOnly = effective == EditorTool.Select && selected == null;
+        StyleOptions.Visibility = crop || effect || selectionOnly ? Visibility.Collapsed : Visibility.Visible;
         TextOptions.Visibility = text && !crop ? Visibility.Visible : Visibility.Collapsed;
         EffectOptions.Visibility = effect && !crop ? Visibility.Visible : Visibility.Collapsed;
         CropOptions.Visibility = crop ? Visibility.Visible : Visibility.Collapsed;
+        SelectionHint.Visibility = selectionOnly ? Visibility.Visible : Visibility.Collapsed;
+        SelectionHint.Text = HasImage ? "Choose an object to edit its properties" : "Open, paste or capture an image to begin";
+        ForwardButton.IsEnabled = selected != null && _document?.Annotations.LastOrDefault()?.Id != selected.Id;
+        BackwardButton.IsEnabled = selected != null && _document?.Annotations.FirstOrDefault()?.Id != selected.Id;
+        DuplicateButton.IsEnabled = DeleteButton.IsEnabled = selected != null;
         FillToggle.Visibility = effective is EditorTool.Rectangle or EditorTool.Ellipse ? Visibility.Visible : Visibility.Collapsed;
         WidthPicker.Visibility = StrokeLabel.Visibility = text ? Visibility.Collapsed : Visibility.Visible;
         SetPicker(WidthPicker, selected?.StrokeWidth ?? Surface.StrokeWidth);
@@ -141,10 +177,20 @@ public partial class ImageEditorView : UserControl
         if (!AnnotationTextBox.IsKeyboardFocusWithin) AnnotationTextBox.Text = selected?.Tool == EditorTool.Text ? selected.Text : Surface.TextContent;
         Color activeColor = selected?.Color ?? Surface.StrokeColor;
         foreach (var button in _colorButtons)
-            button.BorderThickness = Equals(button.Tag, activeColor) ? new Thickness(2) : new Thickness(0);
-        if (selected != null)
-            ObjectList.SelectedItem = ObjectList.Items.Cast<ObjectItem>().FirstOrDefault(item => item.Id == selected.Id);
-        else ObjectList.SelectedItem = null;
+        {
+            bool active = Equals(button.Tag, activeColor);
+            button.SetResourceReference(BorderBrushProperty, active ? "TextBrush" : "SurfaceBrush");
+            AutomationProperties.SetItemStatus(button, active ? "Selected color" : string.Empty);
+        }
+        var selectedItem = ObjectList.Items.Cast<ObjectItem>().FirstOrDefault(item => item.Id == selected?.Id);
+        bool selectionChanged = !ReferenceEquals(ObjectList.SelectedItem, selectedItem);
+        ObjectList.SelectedItem = selectedItem;
+        if (selectionChanged && selectedItem != null)
+            Dispatcher.BeginInvoke(() =>
+            {
+                // Contextual properties can resize the list before the selected row is revealed.
+                if (ReferenceEquals(ObjectList.SelectedItem, selectedItem)) ObjectList.ScrollIntoView(selectedItem);
+            }, DispatcherPriority.Loaded);
         _synchronizing = false;
     }
 
@@ -169,10 +215,10 @@ public partial class ImageEditorView : UserControl
             Color color = (Color)ColorConverter.ConvertFromString(palette[index]);
             var button = new Button
             {
-                Width = 22, Height = 24, Padding = new Thickness(3), Margin = new Thickness(1, 0, 1, 0),
-                Background = Brushes.Transparent, BorderBrush = new SolidColorBrush(Color.FromRgb(152, 156, 166)),
-                BorderThickness = new Thickness(0), Tag = color, ToolTip = names[index],
-                Content = new Border { Background = new SolidColorBrush(color), Width = 14, Height = 14, CornerRadius = new CornerRadius(7), BorderBrush = new SolidColorBrush(Color.FromArgb(90, 140, 140, 140)), BorderThickness = new Thickness(1) }
+                Width = 22, Height = 26, MinHeight = 26, Padding = new Thickness(2), Margin = new Thickness(1, 0, 1, 0),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(2), Tag = color, ToolTip = names[index],
+                Content = new Border { Background = new SolidColorBrush(color), Width = 12, Height = 14, CornerRadius = new CornerRadius(2) }
             };
             System.Windows.Automation.AutomationProperties.SetName(button, names[index] + " annotation color");
             button.Click += (_, _) =>
@@ -197,19 +243,30 @@ public partial class ImageEditorView : UserControl
         Surface.CancelInteraction();
         Surface.Tool = tool;
         Surface.Cursor = tool == EditorTool.Select ? Cursors.Arrow : Cursors.Cross;
-        foreach (Button button in ToolRail.Children.OfType<Button>())
-            button.SetResourceReference(BackgroundProperty, button.Tag?.ToString() == tool.ToString() ? "SelectionBrush" : "SurfaceBrush");
+        RefreshToolButtons();
         RefreshSelection();
         StatusLabel.Text = tool switch
         {
             EditorTool.Select => "Select an object to move or resize it.",
             EditorTool.Text => "Enter text above, then click to place it.",
             EditorTool.Crop => "Drag a crop. Enter applies; Escape cancels.",
-            EditorTool.Blur or EditorTool.Pixelate => "Drag over the area to obscure.",
+            EditorTool.Blur or EditorTool.Pixelate => "Blur can remain recognizable. Use an opaque filled shape for concealment.",
             EditorTool.Pen => "Draw on the image. Each stroke stays editable.",
             _ => "Drag to draw. Hold Shift to constrain."
         };
         Surface.Focus();
+    }
+
+    private void RefreshToolButtons()
+    {
+        foreach (Button button in ToolRail.Children.OfType<Button>())
+        {
+            bool selected = button.Tag?.ToString() == Surface.Tool.ToString();
+            button.SetResourceReference(BackgroundProperty, selected ? "SelectionBrush" : "SurfaceBrush");
+            button.SetResourceReference(BorderBrushProperty, selected ? "AccentBrush" : "SurfaceBrush");
+            button.FontWeight = selected ? FontWeights.SemiBold : FontWeights.Normal;
+            AutomationProperties.SetItemStatus(button, selected ? "Selected tool" : string.Empty);
+        }
     }
 
     private void OnWidthChanged(object sender, SelectionChangedEventArgs e)
@@ -260,6 +317,7 @@ public partial class ImageEditorView : UserControl
     private void RefreshCrop()
     {
         CropSize.Text = Surface.PendingCrop is Rect crop ? $"{Math.Ceiling(crop.Width):N0} × {Math.Ceiling(crop.Height):N0} px" : "Drag to choose a crop";
+        ApplyCropButton.IsEnabled = Surface.PendingCrop != null;
     }
     private void OnApplyCrop(object sender, RoutedEventArgs e) { Surface.ApplyCrop(); SelectTool(EditorTool.Select); }
     private void OnCancelCrop(object sender, RoutedEventArgs e) => SelectTool(EditorTool.Select);
@@ -273,10 +331,10 @@ public partial class ImageEditorView : UserControl
     {
         if (!_synchronizing && ObjectList.SelectedItem is ObjectItem item)
         {
+            CommitText();
             Surface.Tool = EditorTool.Select;
             Surface.Cursor = Cursors.Arrow;
-            foreach (Button button in ToolRail.Children.OfType<Button>())
-                button.SetResourceReference(BackgroundProperty, button.Tag?.ToString() == EditorTool.Select.ToString() ? "SelectionBrush" : "SurfaceBrush");
+            RefreshToolButtons();
             Surface.Select(item.Id);
         }
     }
@@ -285,7 +343,9 @@ public partial class ImageEditorView : UserControl
     {
         bool show = ObjectsPanel.Visibility != Visibility.Visible;
         ObjectsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        ObjectsColumn.Width = new GridLength(show ? 190 : 0);
+        ObjectsColumn.Width = new GridLength(show ? 184 : 0);
+        ObjectsToggle.ToolTip = show ? "Hide object list" : "Show object list";
+        AutomationProperties.SetItemStatus(ObjectsToggle, show ? "Expanded" : "Collapsed");
     }
 
     private void OnResize(object sender, RoutedEventArgs e)
@@ -302,7 +362,7 @@ public partial class ImageEditorView : UserControl
     private void FitImage()
     {
         if (_document == null || Viewport.ActualWidth < 120 || Viewport.ActualHeight < 120) return;
-        SetZoom(Math.Min(1, Math.Min((Viewport.ActualWidth - 96) / _document.Width, (Viewport.ActualHeight - 96) / _document.Height)), userInitiated: false);
+        SetZoom(Math.Min(1, Math.Min((Viewport.ActualWidth - 80) / _document.Width, (Viewport.ActualHeight - 80) / _document.Height)), userInitiated: false);
     }
     private void SetZoom(double zoom, bool userInitiated = true)
     {
@@ -326,8 +386,8 @@ public partial class ImageEditorView : UserControl
         double horizontal = Viewport.HorizontalOffset, vertical = Viewport.VerticalOffset;
         SetZoom(_zoom * (e.Delta > 0 ? 1.2 : 1 / 1.2));
         Viewport.UpdateLayout();
-        Viewport.ScrollToHorizontalOffset((horizontal + pointer.X - 40) * (_zoom / previous) - pointer.X + 40);
-        Viewport.ScrollToVerticalOffset((vertical + pointer.Y - 40) * (_zoom / previous) - pointer.Y + 40);
+        Viewport.ScrollToHorizontalOffset((horizontal + pointer.X - 32) * (_zoom / previous) - pointer.X + 32);
+        Viewport.ScrollToVerticalOffset((vertical + pointer.Y - 32) * (_zoom / previous) - pointer.Y + 32);
         e.Handled = true;
     }
     private void OnViewportMouseDown(object sender, MouseButtonEventArgs e)

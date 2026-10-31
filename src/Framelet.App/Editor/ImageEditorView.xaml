@@ -3,24 +3,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:Framelet.App.Editor"
              Background="{DynamicResource BackgroundBrush}" Foreground="{DynamicResource TextBrush}"
-             Focusable="True" PreviewKeyDown="OnPreviewKeyDown" AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver">
+             Focusable="False" PreviewKeyDown="OnPreviewKeyDown" AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver" UseLayoutRounding="True">
     <UserControl.Resources>
         <Style x:Key="ToolButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="2,8"/>
-            <Setter Property="Margin" Value="5,2"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="2,0,0,0"/>
+            <Setter Property="Padding" Value="2,3"/>
+            <Setter Property="Margin" Value="4,1"/>
+            <Setter Property="Height" Value="40"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Surface" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border x:Name="FocusBorder" BorderBrush="Transparent" BorderThickness="1" CornerRadius="4">
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource RaisedBrush}"/></Trigger>
-                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderThickness" Value="1"/><Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="FocusBorder" Property="BorderBrush" Value="{DynamicResource FocusBrush}"/></Trigger>
                             <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value=".4"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -28,16 +32,16 @@
             </Setter>
         </Style>
         <Style x:Key="ToolIcon" TargetType="Path">
-            <Setter Property="Width" Value="20"/><Setter Property="Height" Value="20"/>
+            <Setter Property="Width" Value="17"/><Setter Property="Height" Value="17"/>
             <Setter Property="Stretch" Value="Uniform"/>
             <Setter Property="Stroke" Value="{DynamicResource TextBrush}"/>
             <Setter Property="StrokeThickness" Value="1.6"/>
             <Setter Property="StrokeStartLineCap" Value="Round"/><Setter Property="StrokeEndLineCap" Value="Round"/>
             <Setter Property="StrokeLineJoin" Value="Round"/>
-            <Setter Property="Margin" Value="0,0,0,5"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
         </Style>
         <Style x:Key="SmallLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/><Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="10"/><Setter Property="HorizontalAlignment" Value="Center"/>
         </Style>
         <Style x:Key="SectionLabel" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
@@ -45,57 +49,65 @@
         </Style>
     </UserControl.Resources>
     <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="52"/><RowDefinition Height="*"/><RowDefinition Height="32"/></Grid.RowDefinitions>
-        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="14,8">
-            <DockPanel LastChildFill="False">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button x:Name="UndoButton" Content="↶" FontSize="20" Width="34" Padding="0" Margin="2,0" Click="OnUndo" ToolTip="Undo (Ctrl+Z)" AutomationProperties.Name="Undo"/>
-                    <Button x:Name="RedoButton" Content="↷" FontSize="20" Width="34" Padding="0" Margin="2,0" Click="OnRedo" ToolTip="Redo (Ctrl+Shift+Z)" AutomationProperties.Name="Redo"/>
-                    <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="10,4"/>
-                    <Button Content="Resize" Click="OnResize" Padding="10,3" ToolTip="Resize image and annotations" Margin="0,0,6,0"/>
-                    <Button x:Name="ObjectsToggle" Content="Objects" Click="OnToggleObjects" Padding="10,3" ToolTip="Show or hide the object list"/>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" MinHeight="52"/><RowDefinition Height="*"/><RowDefinition Height="34"/></Grid.RowDefinitions>
+        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,7">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock x:Name="ToolTitle" Text="Select" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="PropertyScope" Text="Tool defaults" FontSize="10" Foreground="{DynamicResource MutedBrush}" Margin="0,2,0,0"/>
                 </StackPanel>
-                <TextBlock x:Name="ToolTitle" Text="Select" FontWeight="SemiBold" Width="72" VerticalAlignment="Center"/>
-                <StackPanel x:Name="StyleOptions" Orientation="Horizontal">
+                <StackPanel x:Name="EditorCommands" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                    <Button x:Name="UndoButton" Width="32" Padding="0" Margin="0,0,4,0" Click="OnUndo" ToolTip="Undo (Ctrl+Z)" AutomationProperties.Name="Undo"><Path Data="M 8,2 L 2,8 8,14 M 2,8 L 13,8 C 21,8 21,20 13,20" Stroke="{DynamicResource TextBrush}" StrokeThickness="1.6" Width="16" Height="16" Stretch="Uniform"/></Button>
+                    <Button x:Name="RedoButton" Width="32" Padding="0" Click="OnRedo" ToolTip="Redo (Ctrl+Shift+Z)" AutomationProperties.Name="Redo"><Path Data="M 14,2 L 20,8 14,14 M 20,8 L 9,8 C 1,8 1,20 9,20" Stroke="{DynamicResource TextBrush}" StrokeThickness="1.6" Width="16" Height="16" Stretch="Uniform"/></Button>
+                    <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="9,5"/>
+                    <Button x:Name="ResizeButton" Content="Resize" Click="OnResize" Padding="9,3" ToolTip="Resize image and annotations" Margin="0,0,6,0"/>
+                    <Button x:Name="ObjectsToggle" Content="Objects" Click="OnToggleObjects" Padding="9,3" ToolTip="Hide object list" AutomationProperties.Name="Object list"/>
+                </StackPanel>
+                <WrapPanel x:Name="PropertyOptions" Grid.Column="1" VerticalAlignment="Center">
+                <StackPanel x:Name="StyleOptions" Orientation="Horizontal" Height="34">
                     <StackPanel x:Name="ColorSwatches" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <TextBlock x:Name="StrokeLabel" Text="Width" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                    <ComboBox x:Name="WidthPicker" Width="56" SelectionChanged="OnWidthChanged" SelectedIndex="1" VerticalContentAlignment="Center" ToolTip="Stroke width in image pixels">
+                    <ComboBox x:Name="WidthPicker" Width="60" SelectionChanged="OnWidthChanged" SelectedIndex="1" VerticalContentAlignment="Center" ToolTip="Stroke width in image pixels" AutomationProperties.Name="Stroke width in image pixels">
                         <ComboBoxItem Content="2"/><ComboBoxItem Content="4"/><ComboBoxItem Content="6"/><ComboBoxItem Content="10"/><ComboBoxItem Content="16"/>
                     </ComboBox>
                     <CheckBox x:Name="FillToggle" Content="Fill" Margin="12,0,0,0" VerticalAlignment="Center" Click="OnFillChanged"/>
                 </StackPanel>
-                <StackPanel x:Name="TextOptions" Orientation="Horizontal" Visibility="Collapsed">
-                    <TextBox x:Name="AnnotationTextBox" Width="180" Text="Your text" VerticalContentAlignment="Center" TextChanged="OnTextChanged" LostKeyboardFocus="OnTextCommit" PreviewKeyDown="OnTextKeyDown" ToolTip="Text content; press Enter to apply"/>
-                    <ComboBox x:Name="FontPicker" Width="60" Margin="6,0,0,0" SelectionChanged="OnFontChanged" SelectedIndex="2" ToolTip="Font size in image pixels">
+                <StackPanel x:Name="TextOptions" Orientation="Horizontal" Height="34" Visibility="Collapsed">
+                    <TextBox x:Name="AnnotationTextBox" Width="180" Text="Your text" VerticalContentAlignment="Center" TextChanged="OnTextChanged" LostKeyboardFocus="OnTextCommit" PreviewKeyDown="OnTextKeyDown" ToolTip="Text content; press Enter to apply" AutomationProperties.Name="Annotation text"/>
+                    <ComboBox x:Name="FontPicker" Width="64" Margin="6,0,0,0" SelectionChanged="OnFontChanged" SelectedIndex="2" ToolTip="Font size in image pixels" AutomationProperties.Name="Font size in image pixels">
                         <ComboBoxItem Content="14"/><ComboBoxItem Content="18"/><ComboBoxItem Content="24"/><ComboBoxItem Content="32"/><ComboBoxItem Content="48"/><ComboBoxItem Content="64"/>
                     </ComboBox>
                 </StackPanel>
-                <StackPanel x:Name="EffectOptions" Orientation="Horizontal" Visibility="Collapsed">
+                <StackPanel x:Name="EffectOptions" Orientation="Horizontal" Height="34" Visibility="Collapsed">
                     <TextBlock Text="Strength" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" Margin="0,0,8,0"/>
-                    <ComboBox x:Name="EffectPicker" Width="68" SelectionChanged="OnEffectChanged" SelectedIndex="1">
+                    <ComboBox x:Name="EffectPicker" Width="68" SelectionChanged="OnEffectChanged" SelectedIndex="1" AutomationProperties.Name="Effect strength">
                         <ComboBoxItem Content="6"/><ComboBoxItem Content="12"/><ComboBoxItem Content="20"/><ComboBoxItem Content="32"/><ComboBoxItem Content="48"/>
                     </ComboBox>
+                    <TextBlock Text="Not secure concealment" FontSize="11" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" Margin="12,0,0,0" ToolTip="Blur and pixelation can leave information recognizable. Use an opaque filled rectangle to conceal information completely."/>
                 </StackPanel>
-                <StackPanel x:Name="CropOptions" Orientation="Horizontal" Visibility="Collapsed">
+                <StackPanel x:Name="CropOptions" Orientation="Horizontal" Height="34" Visibility="Collapsed">
                     <TextBlock x:Name="CropSize" Text="Drag to choose a crop" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" Margin="0,0,14,0"/>
-                    <Button Content="Apply crop" Click="OnApplyCrop" Padding="12,3" ToolTip="Apply crop (Enter)"/>
+                    <Button x:Name="ApplyCropButton" Content="Apply crop" Click="OnApplyCrop" Padding="12,3" ToolTip="Apply crop (Enter)"/>
                     <Button Content="Cancel" Click="OnCancelCrop" Padding="10,3" Margin="6,0,0,0"/>
                 </StackPanel>
-            </DockPanel>
+                <TextBlock x:Name="SelectionHint" Text="Choose an object to edit its properties" FontSize="12" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                </WrapPanel>
+            </Grid>
         </Border>
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="82"/><ColumnDefinition Width="*"/><ColumnDefinition x:Name="ObjectsColumn" Width="190"/></Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="64"/><ColumnDefinition Width="*"/><ColumnDefinition x:Name="ObjectsColumn" Width="184"/></Grid.ColumnDefinitions>
             <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel x:Name="ToolRail" Margin="0,8">
+                    <StackPanel x:Name="ToolRail" Margin="0,4">
                         <Button Style="{StaticResource ToolButton}" Tag="Select" Click="OnToolClick" ToolTip="Select and move (V)" AutomationProperties.Name="Select tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 3,2 L 3,18 7,14 11,22 15,20 11,12 17,12 Z"/><TextBlock Text="Select" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
                         <Button Style="{StaticResource ToolButton}" Tag="Arrow" Click="OnToolClick" ToolTip="Arrow (A). Hold Shift to constrain." AutomationProperties.Name="Arrow tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 3,19 L 19,3 M 9,3 L 19,3 19,13"/><TextBlock Text="Arrow" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
-                        <Button Style="{StaticResource ToolButton}" Tag="Rectangle" Click="OnToolClick" ToolTip="Rectangle (R). Hold Shift for a square." AutomationProperties.Name="Rectangle tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 2,4 L 21,4 21,19 2,19 Z"/><TextBlock Text="Shape" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
+                        <Button Style="{StaticResource ToolButton}" Tag="Rectangle" Click="OnToolClick" ToolTip="Rectangle (R). Hold Shift for a square." AutomationProperties.Name="Rectangle tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 2,4 L 21,4 21,19 2,19 Z"/><TextBlock Text="Rectangle" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
                         <Button Style="{StaticResource ToolButton}" Tag="Ellipse" Click="OnToolClick" ToolTip="Ellipse (O). Hold Shift for a circle." AutomationProperties.Name="Ellipse tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 22,12 A 10,8 0 1 1 2,12 A 10,8 0 1 1 22,12"/><TextBlock Text="Ellipse" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
                         <Button Style="{StaticResource ToolButton}" Tag="Text" Click="OnToolClick" ToolTip="Text (T). Click to place text." AutomationProperties.Name="Text tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 3,3 L 21,3 M 12,3 L 12,22 M 7,22 L 17,22 M 3,3 L 3,7 M 21,3 L 21,7"/><TextBlock Text="Text" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
                         <Button Style="{StaticResource ToolButton}" Tag="Pen" Click="OnToolClick" ToolTip="Freehand pen (P)" AutomationProperties.Name="Pen tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 3,20 L 4,15 17,2 22,7 9,20 Z M 4,15 L 9,20 M 14,5 L 19,10"/><TextBlock Text="Draw" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
                         <Button Style="{StaticResource ToolButton}" Tag="Highlight" Click="OnToolClick" ToolTip="Highlight (H)" AutomationProperties.Name="Highlight tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 3,15 L 12,4 20,10 11,21 Z M 3,15 L 9,20 M 2,23 L 15,23"/><TextBlock Text="Highlight" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
-                        <Border Height="1" Margin="14,6" Background="{DynamicResource BorderBrush}"/>
+                        <Border Height="1" Margin="12,4" Background="{DynamicResource BorderBrush}"/>
                         <Button Style="{StaticResource ToolButton}" Tag="Blur" Click="OnToolClick" ToolTip="Blur (B)" AutomationProperties.Name="Blur tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 5,3 L 5,21 M 10,5 L 10,19 M 15,3 L 15,21 M 20,5 L 20,19"/><TextBlock Text="Blur" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
                         <Button Style="{StaticResource ToolButton}" Tag="Pixelate" Click="OnToolClick" ToolTip="Pixelate (X)" AutomationProperties.Name="Pixelate tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 2,2 L 10,2 10,10 2,10 Z M 14,2 L 22,2 22,10 14,10 Z M 2,14 L 10,14 10,22 2,22 Z M 14,14 L 22,14 22,22 14,22 Z"/><TextBlock Text="Pixelate" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
                         <Button Style="{StaticResource ToolButton}" Tag="Crop" Click="OnToolClick" ToolTip="Crop (C). Enter applies; Escape cancels." AutomationProperties.Name="Crop tool"><StackPanel><Path Style="{StaticResource ToolIcon}" Data="M 2,6 L 18,6 18,22 M 6,2 L 6,18 22,18"/><TextBlock Text="Crop" Style="{StaticResource SmallLabel}"/></StackPanel></Button>
@@ -104,9 +116,9 @@
             </Border>
             <Grid Grid.Column="1" Background="{DynamicResource BackgroundBrush}">
                 <ScrollViewer x:Name="Viewport" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" PreviewMouseWheel="OnViewportWheel" PreviewMouseDown="OnViewportMouseDown" PreviewMouseMove="OnViewportMouseMove" PreviewMouseUp="OnViewportMouseUp" SizeChanged="OnViewportSizeChanged" Background="{DynamicResource BackgroundBrush}">
-                    <Grid x:Name="CanvasHost" Margin="40" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Border BorderBrush="#30000000" BorderThickness="1">
-                            <local:EditorSurface x:Name="Surface"/>
+                    <Grid x:Name="CanvasHost" Margin="32" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+                            <local:EditorSurface x:Name="Surface" AutomationProperties.Name="Image canvas" AutomationProperties.HelpText="Choose a tool to annotate. Arrow keys move the selected object. Control plus mouse wheel zooms."/>
                         </Border>
                     </Grid>
                 </ScrollViewer>
@@ -117,29 +129,30 @@
                     <TextBlock Text="Your annotations stay editable until you export." Foreground="{DynamicResource MutedBrush}" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
             </Grid>
-            <Border x:Name="ObjectsPanel" Grid.Column="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0" Padding="14,17">
+            <Border x:Name="ObjectsPanel" Grid.Column="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0" Padding="10,12">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top">
-                        <TextBlock Text="OBJECTS" Style="{StaticResource SectionLabel}"/>
-                        <TextBlock x:Name="ObjectCount" Text="No annotations yet" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,14"/>
+                        <TextBlock Text="Objects" FontWeight="SemiBold" Margin="4,0,0,5"/>
+                        <TextBlock x:Name="ObjectCount" Text="No annotations yet" FontSize="11" Foreground="{DynamicResource MutedBrush}" Margin="4,0,0,10"/>
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Bottom">
-                        <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,14,0,14"/>
-                        <WrapPanel>
-                            <Button Content="↑" Width="34" Height="30" Margin="0,0,5,5" Click="OnForward" ToolTip="Bring forward (Ctrl+])" AutomationProperties.Name="Bring object forward"/>
-                            <Button Content="↓" Width="34" Height="30" Margin="0,0,5,5" Click="OnBackward" ToolTip="Send backward (Ctrl+[)" AutomationProperties.Name="Send object backward"/>
-                            <Button Content="Duplicate" Height="30" Padding="7,0" Margin="0,0,0,5" Click="OnDuplicate" ToolTip="Duplicate selected object (Ctrl+D)"/>
-                        </WrapPanel>
-                        <Button Content="Delete object" Click="OnDelete" Margin="0,1,0,16" ToolTip="Delete selected object (Delete)"/>
-                        <TextBlock Text="Move precisely" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,5"/>
-                        <TextBlock Text="Arrow keys nudge 1 px.&#10;Shift moves 10 px." FontSize="11" Foreground="{DynamicResource MutedBrush}" LineHeight="17"/>
-                        <TextBlock Text="Scroll to move the canvas.&#10;Ctrl + scroll to zoom.&#10;Middle-drag or Space-drag to pan." FontSize="11" Foreground="{DynamicResource MutedBrush}" LineHeight="17" Margin="0,12,0,0" TextWrapping="Wrap"/>
+                        <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,10,0,10"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="38"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                            <Button x:Name="ForwardButton" Content="↑" Padding="0" Margin="0,0,4,0" Click="OnForward" ToolTip="Bring forward (Ctrl+])" AutomationProperties.Name="Bring object forward"/>
+                            <Button x:Name="BackwardButton" Grid.Column="1" Content="↓" Padding="0" Margin="0,0,8,0" Click="OnBackward" ToolTip="Send backward (Ctrl+[)" AutomationProperties.Name="Send object backward"/>
+                            <Button x:Name="DuplicateButton" Grid.Column="2" Content="Duplicate" Padding="5,0" Click="OnDuplicate" ToolTip="Duplicate selected object (Ctrl+D)"/>
+                        </Grid>
+                        <Button x:Name="DeleteButton" Content="Delete object" Click="OnDelete" Margin="0,6,0,10" ToolTip="Delete selected object (Delete)" Foreground="{DynamicResource DangerBrush}"/>
+                        <TextBlock Text="Arrow keys nudge · Shift ×10" FontSize="10" Foreground="{DynamicResource MutedBrush}" TextAlignment="Center" ToolTip="Arrow keys move an object by one image pixel. Hold Shift for ten pixels. Ctrl + scroll zooms; middle-drag or Space-drag pans the canvas."/>
                     </StackPanel>
-                    <ListBox x:Name="ObjectList" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextBrush}" SelectionChanged="OnObjectSelected" DisplayMemberPath="Label" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox x:Name="ObjectList" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextBrush}" SelectionChanged="OnObjectSelected" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Annotation objects, front to back">
+                        <ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/></DataTemplate></ListBox.ItemTemplate>
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
-                                <Setter Property="Padding" Value="8,8"/><Setter Property="Margin" Value="0,2"/>
-                                <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="ItemBorder" Padding="{TemplateBinding Padding}" Background="Transparent" CornerRadius="3"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBrush}"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource RaisedBrush}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+                                <Setter Property="Padding" Value="7,7"/><Setter Property="Margin" Value="0,1"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="AutomationProperties.Name" Value="{Binding Label}"/>
+                                <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="FocusBorder" BorderBrush="Transparent" BorderThickness="1" CornerRadius="3"><Border x:Name="ItemBorder" Padding="{TemplateBinding Padding}" Background="Transparent" BorderBrush="Transparent" BorderThickness="2,0,0,0" CornerRadius="2"><ContentPresenter HorizontalAlignment="Stretch"/></Border></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource RaisedBrush}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionBrush}"/><Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/><Setter Property="FontWeight" Value="SemiBold"/></Trigger><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="FocusBorder" Property="BorderBrush" Value="{DynamicResource FocusBrush}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
                             </Style>
                         </ListBox.ItemContainerStyle>
                     </ListBox>
@@ -147,16 +160,16 @@
             </Border>
         </Grid>
         <Border Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="14,0">
-            <DockPanel LastChildFill="False">
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="−" Width="28" Padding="0" Background="Transparent" BorderThickness="0" Click="OnZoomOut" ToolTip="Zoom out"/>
+            <DockPanel LastChildFill="True">
+                <StackPanel x:Name="ZoomControls" DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="−" Width="28" Padding="0" Background="Transparent" BorderThickness="0" Click="OnZoomOut" ToolTip="Zoom out" AutomationProperties.Name="Zoom out"/>
                     <TextBlock x:Name="ZoomLabel" Text="100%" Width="48" TextAlignment="Center" VerticalAlignment="Center" FontSize="11"/>
-                    <Button Content="+" Width="28" Padding="0" Background="Transparent" BorderThickness="0" Click="OnZoomIn" ToolTip="Zoom in"/>
+                    <Button Content="+" Width="28" Padding="0" Background="Transparent" BorderThickness="0" Click="OnZoomIn" ToolTip="Zoom in" AutomationProperties.Name="Zoom in"/>
                     <Button Content="Fit" Padding="8,0" Margin="7,3,0,3" Click="OnFit" ToolTip="Fit image to workspace (Ctrl+0)"/>
                     <Button Content="1:1" Padding="8,0" Margin="5,3,0,3" Click="OnActualSize" ToolTip="Actual pixels (Ctrl+1)"/>
                 </StackPanel>
                 <TextBlock x:Name="DimensionsLabel" Text="No image" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource MutedBrush}" Margin="0,0,18,0"/>
-                <TextBlock x:Name="StatusLabel" Text="Local files. No uploads." VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="StatusLabel" Text="Open, paste or capture an image to begin." VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
             </DockPanel>
         </Border>
     </Grid>

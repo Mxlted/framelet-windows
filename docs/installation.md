@@ -29,7 +29,7 @@ Use `-FfmpegIntegration` to additionally exercise an installed FFmpeg against ge
 Install Inno Setup 6 and the Visual Studio 2022 or 2026 C++ redistributable build components explicitly, then run:
 
 ```powershell
-./scripts/package.ps1 -Version 0.2.0-preview.1
+./scripts/package.ps1 -Version 0.3.0-preview.1
 ```
 
 The script publishes both the application and isolated native worker as self-contained win-x64 applications, copies only the licensed release CRT DLLs, includes dependency notices, creates the ZIP and per-user installer, and verifies every ZIP entry against its SHA-256 manifest. It does not download or install packaging tools. Visual Studio installations are located with Microsoft's `vswhere`; the newest installed release CRT is selected. Use `-PortableOnly` to omit Inno Setup, `-InnoCompiler` for a custom compiler location, and `-VCRuntimeDirectory` to select a licensed x64 `Microsoft.VC143.CRT` or `Microsoft.VC145.CRT` folder under `VC/Redist/MSVC`. Existing named release artifacts require explicit `-Force` replacement.

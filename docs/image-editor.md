@@ -4,6 +4,10 @@ The editor works in image pixels. A screenshot at 200% desktop scaling is still 
 
 Choose a tool in the left rail, draw on the image, then use **Select** to move or resize the object. The object list provides ordering, duplication and deletion. Text, arrows, rectangles, ellipses, pen strokes, highlights, blur and pixelation remain editable while the document is open. Cropping and resizing preserve the remaining annotations as objects. Undo includes those operations.
 
+The compact rail keeps the tools together. Contextual controls show only the properties relevant to the current tool or object, while undo, redo and resize stay separate. **Tool defaults** means the values apply to the next annotation; **Selected object** means changes also edit the selected annotation. Those changed values remain available for the next object. The **Objects** control hides or restores the object list to give the canvas more room. Long object names are shortened in the list and available in tooltips.
+
+Selecting an annotation on the canvas brings its row into view in a long object list. Property edits update row labels without resetting the list or changing a deliberate scroll position.
+
 | Action | Shortcut |
 | --- | --- |
 | Select / arrow / rectangle / ellipse | V / A / R / O |
@@ -18,7 +22,7 @@ Choose a tool in the left rail, draw on the image, then use **Select** to move o
 | Fit / actual pixels | Ctrl+0 / Ctrl+1 |
 | Zoom / pan | Ctrl+wheel / middle-drag or Space-drag |
 
-For text, enter the wording in the contextual toolbar and click the image. Select an existing text object or double-click it to edit the wording. Enter applies the edit. Resizing a text object scales its font and reflows its text.
+For text, enter the wording in the contextual toolbar and click the image. Select an existing text object or double-click it to edit the wording. Enter applies the edit. Choosing another object in the object list commits pending text before changing the selection. Pending text also counts as unsaved work and is committed before copying or saving. Resizing a text object scales its font and reflows its text.
 
 Export and clipboard copy rasterize the document. Blur and pixelation process the pixels of the image **and earlier annotations**, so changing layer order can change their result. These effects run locally and write altered pixels into the exported image. Use an opaque filled rectangle when information must be completely concealed: a weak blur or small pixel blocks can leave information recognizable.
 
@@ -35,6 +39,8 @@ File imports inspect PNG header dimensions and deferred WIC frame dimensions bef
 This version exports flattened images. It does not yet save editable project files, rotate objects, select several objects at once, or preserve multiple frames from animated images. Object edits are retained only while that image remains open; the application checks unsaved changes before replacing it.
 
 ## Validation
+
+The [dark editor layout](images/editor-dark.png) and [light editor layout](images/editor-light.png) are static WPF renderings of a generated sample, not live interaction evidence. See [UI polish and validation](ui-polish.md) for the separate before/after desktop observations, layout checks and remaining limitations.
 
 Run `dotnet run --project tests/Framelet.Editor.Tests -c Release` on Windows. The test runner uses an STA thread and exercises DPI normalization, pixel output and compositing, annotation transforms, crop/resize, undo/redo branching, invalid bounds, and history limits. `-- --render artifacts/editor-preview.png` additionally creates a static UI rendering with a generated sample image. That static rendering is a layout check, not proof of live mouse or keyboard interaction.
 

@@ -1,5 +1,6 @@
 using Framelet.Core;
 using Framelet.Media;
+using System.Security.Cryptography;
 
 var failures = 0;
 var count = 0;
@@ -50,17 +51,68 @@ Check("Nonfinite trim rejected", () => Reject(() => ClipProcessor.BuildArguments
 Check("Explicit missing FFmpeg path does not silently choose PATH", () => Require(FfmpegLocator.Find(Path.Combine(testRoot, "missing.exe")) is null));
 Check("Native defaults need no FFmpeg executable", () => { var s = new RecordingSettings { FfmpegPath = "missing.exe" }; s.Validate(); Require(!s.UseFfmpeg); });
 
-if (args.Contains("--ffmpeg-integration"))
+var ffmpegIntegration = args.Contains("--ffmpeg-integration");
+var ffmpegProcessing = args.Contains("--ffmpeg-processing");
+if (ffmpegIntegration || ffmpegProcessing)
 {
     async Task Live(string name, Func<Task> action) { count++; try { await action(); Console.WriteLine("PASS " + name); } catch (Exception ex) { failures++; Console.WriteLine("FAIL " + name + ": " + ex); } }
+    string HashFile(string path) { using var stream = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(stream)); }
     var exe = await FfmpegLocator.VerifyAsync("");
-    await RecordingRecoveryChecks.RunIntegrationAsync(exe, testRoot, Live);
+    if (ffmpegIntegration) await RecordingRecoveryChecks.RunIntegrationAsync(exe, testRoot, Live);
     var source = Path.Combine(testRoot, "source.mp4");
-    await Live("FFmpeg synthetic clip generation", async () => { var result = await ProcessRunner.RunAsync(exe, ["-hide_banner", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", source]); Require(result.ExitCode == 0); });
+    string? sourceHash = null;
+    await Live("FFmpeg synthetic clip generation", async () =>
+    {
+        var result = await ProcessRunner.RunAsync(exe, ["-hide_banner", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", source]);
+        Require(result.ExitCode == 0); sourceHash = HashFile(source);
+    });
     foreach (var mode in Enum.GetValues<ClipExportMode>())
-        await Live("Clip export " + mode, async () => { var output = Path.Combine(testRoot, mode + (mode == ClipExportMode.WebM ? ".webm" : ".mp4")); await new ClipProcessor().ExportAsync(source, output, .5, 2.2, mode, exe); var decoded = await ProcessRunner.RunAsync(exe, ["-v", "error", "-i", output, "-f", "null", "-"]); Require(decoded.ExitCode == 0 && new FileInfo(output).Length > 1000); });
-    await Live("FFmpeg live region start stop and decode", async () => { var output = Path.Combine(testRoot, "desktop.mp4"); await using var recorder = new FfmpegRecordingBackend(); await recorder.StartAsync(new(output, new(CaptureKind.Region, new(100, 100, 640, 360)), new() { UseFfmpeg = true, FrameRate = 30, FfmpegPath = exe })); await Task.Delay(1300); await recorder.StopAsync(); var result = await ProcessRunner.RunAsync(exe, ["-v", "error", "-i", output, "-f", "null", "-"]); Require(result.ExitCode == 0); });
-    await Live("FFmpeg cancellation removes incomplete output", async () => { var output = Path.Combine(testRoot, "cancel.mp4"); await using var recorder = new FfmpegRecordingBackend(); await recorder.StartAsync(new(output, new(CaptureKind.Region, new(0, 0, 320, 240)), new() { UseFfmpeg = true, FrameRate = 30, FfmpegPath = exe })); await recorder.CancelAsync(); Require(!File.Exists(output) && Directory.GetFiles(testRoot, "*.partial.mp4").Length == 0); });
+        await Live("Clip export " + mode, async () =>
+        {
+            var output = Path.Combine(testRoot, mode + (mode == ClipExportMode.WebM ? ".webm" : ".mp4"));
+            await new ClipProcessor().ExportAsync(source, output, .5, 2.2, mode, exe);
+            var decoded = await ProcessRunner.RunAsync(exe, ["-v", "error", "-i", output, "-f", "null", "-"]);
+            Require(decoded.ExitCode == 0 && string.IsNullOrWhiteSpace(decoded.Output) && new FileInfo(output).Length > 1000);
+            Require(sourceHash is not null && HashFile(source) == sourceHash);
+        });
+    if (ffmpegProcessing)
+    {
+        await Live("Pre-cancelled clip export preserves source and leaves no staging files", async () =>
+        {
+            var directory = Path.Combine(testRoot, "processing-cancel"); Directory.CreateDirectory(directory);
+            var output = Path.Combine(directory, "cancelled.mp4");
+            using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+            try
+            {
+                await new ClipProcessor().ExportAsync(source, output, .5, 2.2, ClipExportMode.ExactMp4, exe, cancellation.Token);
+                throw new Exception("Expected cancellation before export completed.");
+            }
+            catch (OperationCanceledException) { }
+            Require(sourceHash is not null && HashFile(source) == sourceHash);
+            Require(!Directory.EnumerateFiles(directory).Any());
+        });
+        await Live("Clip export refuses an occupied destination and preserves source", async () =>
+        {
+            var directory = Path.Combine(testRoot, "processing-collision"); Directory.CreateDirectory(directory);
+            var output = Path.Combine(directory, "occupied.mp4");
+            const string sentinel = "existing clip destination sentinel";
+            await File.WriteAllTextAsync(output, sentinel);
+            try
+            {
+                await new ClipProcessor().ExportAsync(source, output, .5, 2.2, ClipExportMode.ExactMp4, exe);
+                throw new Exception("Expected the occupied destination to be rejected.");
+            }
+            catch (IOException) { }
+            Require(await File.ReadAllTextAsync(output) == sentinel);
+            Require(sourceHash is not null && HashFile(source) == sourceHash);
+            Require(Directory.EnumerateFiles(directory).Single() == output);
+        });
+    }
+    if (ffmpegIntegration)
+    {
+        await Live("FFmpeg live region start stop and decode", async () => { var output = Path.Combine(testRoot, "desktop.mp4"); await using var recorder = new FfmpegRecordingBackend(); await recorder.StartAsync(new(output, new(CaptureKind.Region, new(100, 100, 640, 360)), new() { UseFfmpeg = true, FrameRate = 30, FfmpegPath = exe })); await Task.Delay(1300); await recorder.StopAsync(); var result = await ProcessRunner.RunAsync(exe, ["-v", "error", "-i", output, "-f", "null", "-"]); Require(result.ExitCode == 0); });
+        await Live("FFmpeg cancellation removes incomplete output", async () => { var output = Path.Combine(testRoot, "cancel.mp4"); await using var recorder = new FfmpegRecordingBackend(); await recorder.StartAsync(new(output, new(CaptureKind.Region, new(0, 0, 320, 240)), new() { UseFfmpeg = true, FrameRate = 30, FfmpegPath = exe })); await recorder.CancelAsync(); Require(!File.Exists(output) && Directory.GetFiles(testRoot, "*.partial.mp4").Length == 0); });
+    }
 }
 
 Console.WriteLine($"{count - failures} passed; {failures} failed.");

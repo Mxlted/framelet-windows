@@ -10,6 +10,8 @@ The editor uses one custom drawing surface, not a UI element per stroke point. A
 
 The shell separates image editing, clip preview, settings, and a small recording window. There is no account, uploader, background network service, telemetry, embedded browser, or dependency download. The FFmpeg download link opens only when clicked.
 
+Shared WPF resources own neutral themes, focus, selection and control templates. Navigation selection also drives the visible page through the accessibility selection pattern. Editor properties distinguish tool defaults from a selected object; changing themes updates resource references while retaining the document. The UI suite exercises the production controls without launching the app startup workflow or saving preferences. See [UI polish and validation](ui-polish.md).
+
 ## Capture and recording are different workloads
 
 Still captures use a short-lived GDI desktop snapshot and DWM window bounds. A frozen selection overlay runs one HWND per monitor, uses physical cursor coordinates, and supports negative desktop origins. This is inexpensive for a one-shot capture and avoids starting a video pipeline. It captures visible SDR pixels; occluded windows, HDR color management, and protected content have different requirements. See [capture details](capture.md).
@@ -23,6 +25,8 @@ A live trial exposed an unmanaged startup stall. The native engine therefore run
 The optional FFmpeg backend runs `gdigrab` and an optional explicitly named DirectShow audio input. It supports region, monitor, and HWND capture, configurable codecs, bitrate and restricted encoding parameters. It does not support pause or independently mixed WASAPI system/mic capture. The UI hides native audio options when FFmpeg is selected and explains these differences.
 
 `ClipProcessor` is separate from backend selection. Native MP4 files can be previewed without FFmpeg; trimming, compression, and format conversion explicitly resolve FFmpeg only when exporting. Exact MP4 export re-encodes with accurate seeking; stream-copy trimming is fast but keyframe-bound. Source files are preserved.
+
+Each loaded clip owns a separate WPF media element. Replacing the source detaches and closes the previous player, and callbacks check player identity. Export reserves the source before opening its destination chooser and keeps source/mode snapshots until completion or cancellation. If Windows cannot preview a codec, a valid manual trim range can still be processed by FFmpeg; preview errors retain the source and values and cannot overwrite export progress or results.
 
 ## Project boundaries
 

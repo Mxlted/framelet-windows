@@ -6,6 +6,26 @@ The first preview is a functional Windows application, not a finished replacemen
 
 Region, visible-window, monitor and virtual-desktop screenshots; frozen per-monitor selector; configurable global hotkeys; tray; disk/clipboard image loading; annotated image export; automatic capture actions; atomic settings; dark/light/system theme. The editor retains movable/resizable annotations, layer order, text edits, crop/resize, undo/redo, blur and pixelation. Native recording and optional FFmpeg recording have separate concrete pipelines. Native supports system and mic endpoints, pause/resume, finalization, cancel/restart, and worker isolation. Clip preview, exact and keyframe trim, compression and WebM export are included.
 
+## 0.3.0 preview release checks, October 30, 2026
+
+The UI polish is prepared for `0.3.0-preview.1`. A read-only review of the 52 commits in the latest ShareX pull found one additional applicable improvement: selected annotations now request their object row be brought into view, and property edits preserve object-list scrolling. [Comparison and evidence](ui-polish.md#follow-up-comparison-and-release-preparation).
+
+- Fresh application and full x64 Release solution builds pass with zero warnings/errors. Locked restore passes after updating project-version constraints; external dependency versions are unchanged.
+- `scripts/test.ps1`: **163 passed, 0 failed** (Core 44, Editor 54, Capture 16, Recording 17, Session 10, UI 22). Two added offscreen regressions cover virtualized object selection/reordering and scroll/label preservation.
+- File-only FFmpeg processing: **51 passed, 0 failed**, including decoded outputs for all four export modes, source preservation, cancellation cleanup and occupied destinations.
+- A fresh self-contained portable ZIP and per-user installer compiled successfully; all **514 package file hashes** passed verification. The native host, app-local CRT, .NET/WPF runtime and dependency notices are included; FFmpeg is not bundled.
+- Logs are retained locally under `artifacts/release-check/fd255108aca0428099438652a6835c11/`. No live desktop input, new recording capture, installation or uninstallation was performed during this release check. The live-interaction limitations below remain.
+
+## UI polish pass, October 30, 2026
+
+Shared theme/focus/menu resources, selected navigation, denser home/editor layouts, stable settings actions and validation, readable recording recovery, and explicit clip states are implemented. Pending text selection, accessible navigation, stale media callbacks and source reservation during export have regression coverage. [Changes and evidence](ui-polish.md).
+
+- Application and full x64 Release solution builds pass with zero warnings/errors. `scripts/test.ps1` passes 161 checks: Core 44, Editor 54, Capture 16, Recording 17, Session 10, UI 20.
+- File-only FFmpeg checks pass 51 checks (44 base plus 7), including four exported formats with complete decode, unchanged source hashes, cancellation cleanup and occupied-destination preservation.
+- Six live baseline images and 22 static after-state renders are retained locally. Updated README/editor images are explicitly labeled static. Layout assertions and 96/120/144/192-DPI raster outputs do not establish live monitor-DPI behavior.
+- Computer Use was stopped with physical Escape before live after-validation. Complete capture/clipboard/save, keyboard-only, tray/unsaved-dialog, native recording/recovery and live clip-preview checks remain unverified in this pass. Desktop/native opt-in suites were not rerun; the October 26 live evidence below is historical.
+- Native remains the default; recording backends, media ownership, capture coordinates and effect-preview scheduling are unchanged. ShareX is unchanged. No shipping or installation actions were performed during the original polish pass.
+
 ## Audit fixes validated on October 26, 2026
 
 All eight confirmed audit findings are implemented: recording recovery through disposal, correct translucent effects, image size checks before full decoding, painted crop bounds, denied-access settings recovery, refreshed delayed window geometry, transactional hotkeys, and asynchronous scaled effect previews. [Implementation, files, regressions, commands and measurements](audit-fixes.md).

@@ -40,8 +40,8 @@ public partial class App : Application
     public void ApplyTheme(string theme)
     {
         var light = theme == "Light" || theme == "System" && (int?)Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 0) == 1;
-        var colors = light ? new[] { "#F2F2F0", "#FAFAF8", "#E9E9E5", "#CECEC8", "#202124", "#65666A", "#94601C", "#EADCC5" } : new[] { "#191A1C", "#222326", "#2B2D30", "#3D3F43", "#EEEEF0", "#A6A7AD", "#E9B566", "#494035" };
-        string[] keys = ["BackgroundBrush", "SurfaceBrush", "RaisedBrush", "BorderBrush", "TextBrush", "MutedBrush", "AccentBrush", "SelectionBrush"];
+        var colors = light ? new[] { "#F2F2F2", "#FAFAFA", "#E8E8E8", "#CDCDCF", "#202124", "#606166", "#875617", "#EFE1CB", "#795018", "#B32626" } : new[] { "#191A1C", "#222326", "#2B2D30", "#3D3F43", "#EEEEF0", "#A6A7AD", "#E9B566", "#494035", "#F3CE98", "#F08B88" };
+        string[] keys = ["BackgroundBrush", "SurfaceBrush", "RaisedBrush", "BorderBrush", "TextBrush", "MutedBrush", "AccentBrush", "SelectionBrush", "FocusBrush", "DangerBrush"];
         for (var i = 0; i < keys.Length; i++) Resources[keys[i]] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colors[i]));
         foreach (Window window in Windows) ApplyTitleTheme(window);
     }

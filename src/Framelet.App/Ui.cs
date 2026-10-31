@@ -22,13 +22,13 @@ internal static class Ui
     public static Binding Bind(object source, string path) => new(path) { Source = source, Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged, ValidatesOnExceptions = true };
     public static void Header(Panel panel, string text, string? help = null)
     {
-        var title = Text(text, 23); title.FontWeight = FontWeights.SemiBold; title.Margin = new Thickness(0, 0, 0, 10); panel.Children.Add(title);
-        if (help is not null) { var label = Text(help, 13, true); label.Margin = new Thickness(0, 0, 0, 24); panel.Children.Add(label); }
+        var title = Text(text, 21); title.FontWeight = FontWeights.SemiBold; title.Margin = new Thickness(0, 0, 0, 8); panel.Children.Add(title);
+        if (help is not null) { var label = Text(help, 13, true); label.Margin = new Thickness(0, 0, 0, 18); panel.Children.Add(label); }
     }
     public static void Row(Panel panel, string label, FrameworkElement control, string? help = null)
     {
-        var block = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
-        var text = Text(label); text.Margin = new Thickness(0, 0, 0, 7); block.Children.Add(text);
+        var block = new StackPanel { Margin = new Thickness(0, 0, 0, 14) };
+        var text = Text(label); text.Margin = new Thickness(0, 0, 0, 5); block.Children.Add(text);
         AutomationProperties.SetLabeledBy(control, text);
         if (help is not null) AutomationProperties.SetHelpText(control, help);
         control.HorizontalAlignment = HorizontalAlignment.Stretch;

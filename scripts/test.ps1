@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 Push-Location $projectRoot
 try {
-    $projects = @('Framelet.Core.Tests', 'Framelet.Editor.Tests', 'Framelet.Capture.Tests', 'Framelet.Recording.Tests', 'Framelet.Session.Tests')
+    $projects = @('Framelet.Core.Tests', 'Framelet.Editor.Tests', 'Framelet.Capture.Tests', 'Framelet.Recording.Tests', 'Framelet.Session.Tests', 'Framelet.Ui.Tests')
     foreach ($name in $projects) {
         $project = "tests/$name/$name.csproj"
         Write-Host "Running $name"

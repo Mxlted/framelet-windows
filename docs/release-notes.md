@@ -1,6 +1,23 @@
-# Framelet 0.2.0-preview.1
+# Framelet 0.3.0-preview.1
 
-This preview fixes the eight confirmed Framelet audit findings and adds a reusable [UI/UX polish prompt](prompts/ui-ux-polish.md) for the next design pass.
+This preview makes the capture and annotation workspace more compact and consistent, with clearer settings, recording recovery and clip export controls.
+
+- Neutral dark/light controls now share visible keyboard focus, selected navigation and accessible names. The complete editor tool rail fits at minimum size, contextual properties stay separate from document actions, and recent files have explicit open actions.
+- Text drafts survive object selection, theme changes and pane changes. Selecting an annotation on the canvas reveals its row in long object lists.
+- Settings keep Save and Cancel visible, preserve drafts after validation errors, and distinguish native recording, optional FFmpeg recording and clip-export requirements.
+- Recording recovery keeps the completed file path readable and copyable. Clip preview retains trim values after codec errors; stale player callbacks cannot replace the current clip state, and export reserves its source before the save chooser opens.
+
+The latest local ShareX pull was reviewed read-only. Framelet already covered the applicable recent-file, capture, crop, zoom and theme fixes. The selected-object visibility improvement was implemented independently; no ShareX source or assets were copied. See [UI polish and comparison](ui-polish.md).
+
+Downloads include the self-contained Windows x64 portable ZIP, per-user installer and SHA-256 checksums. Native recording remains the default. FFmpeg is optional and user supplied; clip export requires it independently of the recording preference. Artifacts are unsigned.
+
+Validation: **163 deterministic checks passed**, including 22 UI checks, plus **51 file-only FFmpeg checks**. Application and full x64 Release solution builds completed with zero warnings/errors. Details are recorded in [status](status.md).
+
+Live after-validation was stopped during the polish pass, so complete clipboard/save, keyboard-only, actual DPI, native recording/recovery and live clip-preview interactions remain unverified for this release. Static renders and generated-media checks do not establish those behaviors. No installation or uninstallation was performed.
+
+## Previous preview: 0.2.0-preview.1
+
+This preview fixed the eight confirmed Framelet audit findings.
 
 - Completed native and FFmpeg recordings survive final-save collisions, automatic cleanup, and disposal. The recording window reports the actual recovery path and offers Save recording as without overwriting existing files.
 - Blur and pixelation correctly replace translucent pixels, and effect previews use scaled background processing. The measured warmed 4K blur workload at 10% zoom dropped from 367.87–530.68 ms to 0.02–2.80 ms in the UI render call; preview readiness took 46.05–67.48 ms. Committed exports remain full resolution.

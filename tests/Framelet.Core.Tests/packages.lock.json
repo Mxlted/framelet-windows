@@ -8,7 +8,7 @@
       "framelet.media": {
         "type": "Project",
         "dependencies": {
-          "Framelet.Core": "[0.2.0, )"
+          "Framelet.Core": "[0.3.0, )"
         }
       }
     }

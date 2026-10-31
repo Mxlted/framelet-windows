@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using Framelet.App.Capture;
@@ -36,7 +37,7 @@ public partial class MainWindow : Window
     {
         app.ApplyTheme(app.Settings.Theme); Editor.ApplyDefaults(app.Settings.EditorColor, app.Settings.EditorStroke);
         CaptureHint.Text = app.Settings.RegionHotkey.Replace("+", " + ");
-        BackendHint.Text = (app.Settings.Recording.UseFfmpeg ? "FFmpeg" : "Native recording") + " · " + app.Settings.Recording.FrameRate + " FPS · MP4";
+        BackendHint.Text = (app.Settings.Recording.UseFfmpeg ? "FFmpeg" : "Native") + " · " + app.Settings.Recording.FrameRate + " FPS · MP4";
         List<string> issues = [];
         if (registerHotkeys)
             foreach (var binding in HotkeyBindings(app.Settings))
@@ -79,7 +80,17 @@ public partial class MainWindow : Window
     }
 
     private void ShowMain() { Show(); if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal; Activate(); }
-    private void ShowPage(string page) { HomeView.Visibility = page == "home" ? Visibility.Visible : Visibility.Collapsed; Editor.Visibility = page == "editor" ? Visibility.Visible : Visibility.Collapsed; ClipHost.Visibility = page == "clips" ? Visibility.Visible : Visibility.Collapsed; }
+    private void NavigationSelected(object sender, RoutedEventArgs e)
+    {
+        if (HomeView is not null && sender is RadioButton { Tag: string page }) ShowPage(page);
+    }
+    private void ShowPage(string page)
+    {
+        HomeView.Visibility = page == "home" ? Visibility.Visible : Visibility.Collapsed;
+        Editor.Visibility = page == "editor" ? Visibility.Visible : Visibility.Collapsed;
+        ClipHost.Visibility = page == "clips" ? Visibility.Visible : Visibility.Collapsed;
+        HomeNav.IsChecked = page == "home"; EditorNav.IsChecked = page == "editor"; ClipsNav.IsChecked = page == "clips";
+    }
 
     private async Task Capture(string mode)
     {
@@ -130,6 +141,10 @@ public partial class MainWindow : Window
 
     public void OpenFile(string path)
     {
+        if (IsClipPath(path))
+        {
+            ShowMain(); ShowPage("clips"); clips.LoadClip(path); return;
+        }
         if (!CanReplaceImage()) return;
         try
         {
@@ -225,19 +240,33 @@ public partial class MainWindow : Window
 
     private void RefreshRecent()
     {
+        OutputFolder.Text = app.Settings.OutputDirectory;
         try
         {
-            var files = Directory.Exists(app.Settings.OutputDirectory) ? Directory.EnumerateFiles(app.Settings.OutputDirectory).Where(x => new[] { ".png", ".jpg", ".bmp", ".mp4", ".webm" }.Contains(Path.GetExtension(x).ToLowerInvariant())).OrderByDescending(File.GetLastWriteTimeUtc).Take(12).ToArray() : [];
+            var files = Directory.Exists(app.Settings.OutputDirectory) ? Directory.EnumerateFiles(app.Settings.OutputDirectory).Where(x => new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".mp4", ".webm", ".mkv", ".mov", ".avi" }.Contains(Path.GetExtension(x).ToLowerInvariant())).OrderByDescending(File.GetLastWriteTimeUtc).Take(12).ToArray() : [];
             RecentList.Items.Clear(); foreach (var file in files)
             {
-                var row = new DockPanel(); var info = Ui.Text(File.GetLastWriteTime(file).ToString("MMM d · h:mm tt"), 12, true); DockPanel.SetDock(info, Dock.Right); row.Children.Add(info); row.Children.Add(Ui.Text((Path.GetExtension(file) == ".mp4" ? "▷   " : "▧   ") + Path.GetFileName(file)));
-                RecentList.Items.Add(new ListBoxItem { Content = row, Tag = file });
+                var row = new Grid(); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) }); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var kind = Ui.Text(IsClipPath(file) ? "CLIP" : "IMAGE", 10, true); row.Children.Add(kind);
+                var name = Ui.Text(Path.GetFileName(file)); name.TextWrapping = TextWrapping.NoWrap; name.TextTrimming = TextTrimming.CharacterEllipsis; name.Margin = new Thickness(0, 0, 16, 0); Grid.SetColumn(name, 1); row.Children.Add(name);
+                var info = Ui.Text(File.GetLastWriteTime(file).ToString("MMM d · h:mm tt"), 12, true); Grid.SetColumn(info, 2); row.Children.Add(info);
+                var item = new ListBoxItem { Content = row, Tag = file, ToolTip = file };
+                AutomationProperties.SetName(item, Path.GetFileName(file)); AutomationProperties.SetHelpText(item, "Press Enter or double-click to open. " + file); RecentList.Items.Add(item);
             }
             EmptyRecent.Visibility = files.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
-        catch (IOException ex) { Status.Text = "Recent files could not be read: " + ex.Message; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "Recent files could not be read: " + ex.Message; }
     }
-    private void RecentOpen(object sender, MouseButtonEventArgs e) { if (RecentList.SelectedItem is ListBoxItem { Tag: string path }) { if (Path.GetExtension(path) is ".mp4" or ".webm") { ShowPage("clips"); clips.LoadClip(path); } else OpenFile(path); } }
+    private static bool IsClipPath(string path) => Path.GetExtension(path).ToLowerInvariant() is ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi";
+    private void OpenSelectedRecent() { if (RecentList.SelectedItem is ListBoxItem { Tag: string path }) OpenFile(path); }
+    private void RecentOpen(object sender, MouseButtonEventArgs e)
+    {
+        // A double click on unused list space must not reopen an old selection.
+        if (ItemsControl.ContainerFromElement(RecentList, e.OriginalSource as DependencyObject) is ListBoxItem) OpenSelectedRecent();
+    }
+    private void RecentOpenClick(object sender, RoutedEventArgs e) => OpenSelectedRecent();
+    private void RecentSelectionChanged(object sender, SelectionChangedEventArgs e) { if (OpenRecentButton is not null) OpenRecentButton.IsEnabled = RecentList.SelectedItem is not null; }
+    private void RecentKeyDown(object sender, KeyEventArgs e) { if (e.Key == Key.Enter) { OpenSelectedRecent(); e.Handled = true; } }
     private void ShowError(Exception ex) { Status.Text = ex.Message; MessageBox.Show(this, ex.Message, "Framelet", MessageBoxButton.OK, MessageBoxImage.Error); }
     private void CaptureMenu(object sender, RoutedEventArgs e)
     {
