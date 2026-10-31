@@ -22,6 +22,8 @@ A live trial exposed an unmanaged startup stall. The native engine therefore run
 
 `IRecordingBackend` is the one shared recording boundary. `RecordingBackendSelector` constructs exactly the selected backend. The persisted `UseFfmpeg` flag is false by default. No fallback switches engines after a failure.
 
+Settings audio-device discovery also uses the native worker, with a separate one-shot command and bounded process lifetime/output. This keeps native endpoint-discovery failures out of the UI process. Deterministic settings tests and static renders inject device fixtures; they never enumerate physical endpoints.
+
 The optional FFmpeg backend runs `gdigrab` and an optional explicitly named DirectShow audio input. It supports region, monitor, and HWND capture, configurable codecs, bitrate and restricted encoding parameters. It does not support pause or independently mixed WASAPI system/mic capture. The UI hides native audio options when FFmpeg is selected and explains these differences.
 
 `ClipProcessor` is separate from backend selection. Native MP4 files can be previewed without FFmpeg; trimming, compression, and format conversion explicitly resolve FFmpeg only when exporting. Exact MP4 export re-encodes with accurate seeking; stream-copy trimming is fast but keyframe-bound. Source files are preserved.

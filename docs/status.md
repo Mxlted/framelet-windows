@@ -8,13 +8,14 @@ Region, visible-window, monitor and virtual-desktop screenshots; frozen per-moni
 
 ## 0.3.0 preview release checks, October 30, 2026
 
-The UI polish is prepared for `0.3.0-preview.1`. A read-only review of the 52 commits in the latest ShareX pull found one additional applicable improvement: selected annotations now request their object row be brought into view, and property edits preserve object-list scrolling. [Comparison and evidence](ui-polish.md#follow-up-comparison-and-release-preparation).
+The UI polish is prepared for `0.3.0-preview.2`. A read-only review of the 52 commits in the latest ShareX pull found one additional applicable improvement: selected annotations now request their object row be brought into view, and property edits preserve object-list scrolling. [Comparison and evidence](ui-polish.md#follow-up-comparison-and-release-preparation).
 
 - Fresh application and full x64 Release solution builds pass with zero warnings/errors. Locked restore passes after updating project-version constraints; external dependency versions are unchanged.
-- `scripts/test.ps1`: **163 passed, 0 failed** (Core 44, Editor 54, Capture 16, Recording 17, Session 10, UI 22). Two added offscreen regressions cover virtualized object selection/reordering and scroll/label preservation.
+- `scripts/test.ps1`: **172 passed, 0 failed** (Core 44, Editor 54, Capture 16, Recording 25, Session 10, UI 23). Added regressions cover virtualized object selection/reordering, scroll/label preservation, discovery subprocess protocol/failure/deadline handling, and usable settings after device discovery fails.
 - File-only FFmpeg processing: **51 passed, 0 failed**, including decoded outputs for all four export modes, source preservation, cancellation cleanup and occupied destinations.
 - A fresh self-contained portable ZIP and per-user installer compiled successfully; all **514 package file hashes** passed verification. The native host, app-local CRT, .NET/WPF runtime and dependency notices are included; FFmpeg is not bundled.
-- Logs are retained locally under `artifacts/release-check/fd255108aca0428099438652a6835c11/`. No live desktop input, new recording capture, installation or uninstallation was performed during this release check. The live-interaction limitations below remain.
+- Real isolated device discovery completed successfully with 10 output and 5 input endpoints. This is endpoint-list evidence, not recording or audio-quality validation. Native discovery now stays inside a bounded worker; the first tag's hosted native-enumeration crash and correction are documented in the comparison report.
+- Final logs are retained locally under `artifacts/release-check/b7ed9225215d46309c8cfc25ba70f04a/`. No live desktop input, new recording capture, installation or uninstallation was performed during this release check. The live-interaction limitations below remain.
 
 ## UI polish pass, October 30, 2026
 

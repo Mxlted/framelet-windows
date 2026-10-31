@@ -82,11 +82,17 @@ The October 30 ShareX pull advanced the read-only reference from `f3ae963af` to 
 | Neutral themes, compact fields, toolbar and slider fixes | Existing polish covers the applicable controls; several changes fix Avalonia-specific templates. |
 | Keep active history row visible (`ba329ffac`) | A comparable Framelet gap was reproduced with 30 annotations: canvas selection left the corresponding object row virtualized and offscreen. An original focused correction reveals newly selected objects while preserving deliberate scrolling during property-only refreshes. |
 
-No ShareX code or assets were copied. No recording, media or FFmpeg backend changes were present in the pull. Upstream Framelet README cleanup and prompt deletion were synchronized before release preparation. The release version is `0.3.0-preview.1`; the evidence boundaries above still apply.
+No ShareX code or assets were copied. No recording, media or FFmpeg backend changes were present in the pull. Upstream Framelet README cleanup and prompt deletion were synchronized before release preparation. The release version is `0.3.0-preview.2`; the evidence boundaries above still apply.
 
 Two added UI regressions cover selected-row realization in a long virtualized list, selection identity after layer reordering, and scroll preservation with updated text labels after property edits. The original code failed these checks. Offscreen tests establish row realization and state preservation, not live viewport visibility.
 
 Fresh release checks passed: application and full x64 Release solution builds with zero warnings/errors, **163 deterministic checks** (including 22 UI checks), and **51 file-only FFmpeg processing checks**. Logs are retained locally in `artifacts/release-check/fd255108aca0428099438652a6835c11/`. No additional desktop input, native recording, installation or uninstallation was performed.
+
+The first tag, `v0.3.0-preview.1`, failed both hosted workflows before packaging and was not published. The new UI suite opened Recording settings and accidentally invoked physical device enumeration. ScreenRecorderLib terminated with `0xC0000005` in `ListAudioDevices`. Its [7.0.1 source](https://github.com/sskodje/ScreenRecorderLib/blob/v7.0.1/ScreenRecorderLibNative/CoreAudio.util.cpp#L62-L66) dereferences a default device without checking that discovery succeeded; this can also affect systems without a default endpoint. The exact endpoint state of the hosted runner was not captured.
+
+Settings tests and static renders now inject named audio-device fixtures. Production discovery uses the isolated native worker with bounded output and lifetime, so a native discovery failure becomes an unavailable-list error while the app and draft settings remain intact. Device resolution during recording remains inside the recording worker. Fixtures establish UI and subprocess behavior; they do not validate capture or audio quality.
+
+After this correction, fresh application and full x64 Release solution builds passed with zero warnings/errors, all **172 deterministic checks** passed (Core 44, Editor 54, Capture 16, Recording 25, Session 10, UI 23), and all **51 file-only FFmpeg checks** passed. Real isolated device discovery returned 10 output and 5 input endpoints. Native-exit and timeout cases use subprocess fixtures; no physical endpoint was removed and no new recording was captured. Final logs are in `artifacts/release-check/b7ed9225215d46309c8cfc25ba70f04a/`.
 
 ## API references checked
 

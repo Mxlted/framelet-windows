@@ -80,13 +80,13 @@ internal static class RenderEvidence
             }
 
             app.ApplyTheme("Dark");
-            var general = new SettingsWindow(app.Settings, _ => throw new InvalidOperationException("Evidence must not save settings."));
+            var general = new SettingsWindow(app.Settings, _ => throw new InvalidOperationException("Evidence must not save settings."), listNativeAudioDevices: NativeAudioFixture.List);
             try { Render(general, new Size(814, 671), 120, "static-settings-general-dark.png", "Settings, General draft", "Dark"); }
             finally { general.Close(); }
 
             app.ApplyTheme("Light");
-            var recordingSettings = new SettingsWindow(app.Settings, _ => throw new InvalidOperationException("Evidence must not save settings."), "Recording");
-            try { Render(recordingSettings, new Size(724, 561), 120, "static-settings-recording-light.png", "Native recording settings at minimum client layout", "Light"); }
+            var recordingSettings = new SettingsWindow(app.Settings, _ => throw new InvalidOperationException("Evidence must not save settings."), "Recording", NativeAudioFixture.List);
+            try { Render(recordingSettings, new Size(724, 561), 120, "static-settings-recording-light.png", "Native recording settings with fixture audio devices at minimum client layout", "Light"); }
             finally { recordingSettings.Close(); }
 
             RenderClip("Dark", failed: false);
@@ -98,7 +98,7 @@ internal static class RenderEvidence
             {
                 "# Static WPF evidence", "",
                 "These PNGs render the production controls offscreen with RenderTargetBitmap. No window was shown; no keyboard/mouse input, capture, recording, export or persisted-settings change occurred. Native title bars are excluded.", "",
-                "The supplied sample PNG is used unchanged in the plain editor views. Annotated views add generated editable annotations. Home recent files are empty fixture data. Clip codec failure and recording recovery are injected UI states, not real media/codec/recovery observations.", "",
+                "The supplied sample PNG is used unchanged in the plain editor views. Annotated views add generated editable annotations. Home recent files are empty fixture data. Settings audio devices use fixture IDs and names without enumerating hardware. Clip codec failure and recording recovery are injected UI states, not real media/codec/recovery observations.", "",
                 "96/120/144/192 DPI specify output raster density (100/125/150/200 percent). DIPs stay fixed. These files do not establish real monitor-DPI, mixed-DPI, keyboard, screen-reader or live-interaction behavior.", "",
                 "| File | Scenario | Theme | Content DIPs | Output DPI | Pixels |", "| --- | --- | --- | --- | --- | --- |"
             };

@@ -1,4 +1,4 @@
-# Framelet 0.3.0-preview.1
+# Framelet 0.3.0-preview.2
 
 This preview makes the capture and annotation workspace more compact and consistent, with clearer settings, recording recovery and clip export controls.
 
@@ -6,12 +6,13 @@ This preview makes the capture and annotation workspace more compact and consist
 - Text drafts survive object selection, theme changes and pane changes. Selecting an annotation on the canvas reveals its row in long object lists.
 - Settings keep Save and Cancel visible, preserve drafts after validation errors, and distinguish native recording, optional FFmpeg recording and clip-export requirements.
 - Recording recovery keeps the completed file path readable and copyable. Clip preview retains trim values after codec errors; stale player callbacks cannot replace the current clip state, and export reserves its source before the save chooser opens.
+- Native audio device discovery runs in the isolated worker. A discovery crash or timeout reports an unavailable device list instead of terminating Settings.
 
 The latest local ShareX pull was reviewed read-only. Framelet already covered the applicable recent-file, capture, crop, zoom and theme fixes. The selected-object visibility improvement was implemented independently; no ShareX source or assets were copied. See [UI polish and comparison](ui-polish.md).
 
 Downloads include the self-contained Windows x64 portable ZIP, per-user installer and SHA-256 checksums. Native recording remains the default. FFmpeg is optional and user supplied; clip export requires it independently of the recording preference. Artifacts are unsigned.
 
-Validation: **163 deterministic checks passed**, including 22 UI checks, plus **51 file-only FFmpeg checks**. Application and full x64 Release solution builds completed with zero warnings/errors. Details are recorded in [status](status.md).
+Validation: **172 deterministic checks passed**, including 23 UI checks, plus **51 file-only FFmpeg checks**. Application and full x64 Release solution builds completed with zero warnings/errors. Isolated device discovery also completed on the development machine. Details are recorded in [status](status.md).
 
 Live after-validation was stopped during the polish pass, so complete clipboard/save, keyboard-only, actual DPI, native recording/recovery and live clip-preview interactions remain unverified for this release. Static renders and generated-media checks do not establish those behaviors. No installation or uninstallation was performed.
 

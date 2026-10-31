@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Framelet.App;
 using Framelet.Core;
+using Framelet.Recording;
 
 internal static class SettingsUiChecks
 {
@@ -11,7 +12,7 @@ internal static class SettingsUiChecks
         check("Settings retain drafts across categories and theme resource changes", () =>
         {
             var original = new AppSettings();
-            var window = new SettingsWindow(original, _ => throw new InvalidOperationException("Unexpected save"));
+            var window = new SettingsWindow(original, _ => throw new InvalidOperationException("Unexpected save"), listNativeAudioDevices: NativeAudioFixture.List);
             try
             {
                 SetText(Find<TextBox>(window, nameof(AppSettings.FilenamePattern)), "Draft_{date}_{time}");
@@ -29,7 +30,7 @@ internal static class SettingsUiChecks
         check("Settings route an invalid output folder without losing entered values", () =>
         {
             bool applied = false;
-            var window = new SettingsWindow(new AppSettings(), _ => applied = true);
+            var window = new SettingsWindow(new AppSettings(), _ => applied = true, listNativeAudioDevices: NativeAudioFixture.List);
             try
             {
                 SetText(Find<TextBox>(window, nameof(AppSettings.OutputDirectory)), "relative-folder");
@@ -46,7 +47,7 @@ internal static class SettingsUiChecks
         check("Settings identify both actions in duplicate hotkeys and preserve the draft", () =>
         {
             bool applied = false;
-            var window = new SettingsWindow(new AppSettings(), _ => applied = true, "Hotkeys");
+            var window = new SettingsWindow(new AppSettings(), _ => applied = true, "Hotkeys", NativeAudioFixture.List);
             try
             {
                 SetText(Find<TextBox>(window, nameof(AppSettings.WindowHotkey)), "Shift+Ctrl+2");
@@ -62,7 +63,7 @@ internal static class SettingsUiChecks
         check("Long settings save failures keep actions reachable and preserve working values", () =>
         {
             var current = new AppSettings();
-            var window = new SettingsWindow(current, _ => throw new IOException(new string('x', 4000))) { Width = 740, Height = 600 };
+            var window = new SettingsWindow(current, _ => throw new IOException(new string('x', 4000)), listNativeAudioDevices: NativeAudioFixture.List) { Width = 740, Height = 600 };
             try
             {
                 SetText(Find<TextBox>(window, nameof(AppSettings.FilenamePattern)), "Unsaved_{time}");
@@ -83,25 +84,81 @@ internal static class SettingsUiChecks
         {
             var current = new AppSettings();
             current.Recording.FfmpegAudioDevice = "Saved input";
-            var window = new SettingsWindow(current, _ => { }, "Recording");
+            current.Recording.SystemAudioDeviceId = NativeAudioFixture.Outputs[0].Id;
+            current.Recording.MicrophoneDeviceId = NativeAudioFixture.Inputs[0].Id;
+            var window = new SettingsWindow(current, _ => { }, "Recording", NativeAudioFixture.List);
             try
             {
                 Require(!window.Result.Recording.UseFfmpeg);
+                var outputs = FindDevices(window, nameof(RecordingSettings.SystemAudioDeviceId));
+                var inputs = FindDevices(window, nameof(RecordingSettings.MicrophoneDeviceId));
+                Require(outputs.Items.Cast<NativeAudioDevice>().Select(device => device.Name).SequenceEqual(
+                    new[] { "Windows default" }.Concat(NativeAudioFixture.Outputs.Select(device => device.Name))));
+                Require(inputs.Items.Cast<NativeAudioDevice>().Select(device => device.Name).SequenceEqual(
+                    new[] { "Windows default" }.Concat(NativeAudioFixture.Inputs.Select(device => device.Name))));
+                Require(Equals(outputs.SelectedValue, NativeAudioFixture.Outputs[0].Id) &&
+                    Equals(inputs.SelectedValue, NativeAudioFixture.Inputs[0].Id));
+                SetDevice(outputs, NativeAudioFixture.Outputs[1].Id);
+                SetDevice(inputs, NativeAudioFixture.Inputs[1].Id);
                 var toggle = Find<CheckBox>(window, nameof(RecordingSettings.UseFfmpeg));
                 toggle.SetCurrentValue(CheckBox.IsCheckedProperty, true);
                 Require(window.Result.Recording.UseFfmpeg);
                 SetText(Find<TextBox>(window, nameof(RecordingSettings.FfmpegAudioDevice)), "Draft audio input");
                 Find<CheckBox>(window, nameof(RecordingSettings.UseFfmpeg)).SetCurrentValue(CheckBox.IsCheckedProperty, false);
                 Require(!window.Result.Recording.UseFfmpeg);
+                Require(Equals(FindDevices(window, nameof(RecordingSettings.SystemAudioDeviceId)).SelectedValue, NativeAudioFixture.Outputs[1].Id));
+                Require(Equals(FindDevices(window, nameof(RecordingSettings.MicrophoneDeviceId)).SelectedValue, NativeAudioFixture.Inputs[1].Id));
                 Find<CheckBox>(window, nameof(RecordingSettings.UseFfmpeg)).SetCurrentValue(CheckBox.IsCheckedProperty, true);
                 Require(Find<TextBox>(window, nameof(RecordingSettings.FfmpegAudioDevice)).Text == "Draft audio input");
                 Require(!current.Recording.UseFfmpeg && current.Recording.FfmpegAudioDevice == "Saved input");
+                Require(current.Recording.SystemAudioDeviceId == NativeAudioFixture.Outputs[0].Id &&
+                    current.Recording.MicrophoneDeviceId == NativeAudioFixture.Inputs[0].Id);
+            }
+            finally { window.Close(); }
+        });
+
+        check("Native device discovery failures preserve settings and leave the FFmpeg backend available", () =>
+        {
+            var current = new AppSettings();
+            current.Recording.SystemAudioDeviceId = "saved-output-id";
+            current.Recording.MicrophoneDeviceId = "saved-input-id";
+            var requests = new List<bool>();
+            IReadOnlyList<NativeAudioDevice> FailedDiscovery(bool microphone)
+            {
+                requests.Add(microphone);
+                throw new IOException("Isolated audio worker stopped unexpectedly.");
+            }
+            var window = new SettingsWindow(current, _ => { }, "Recording", FailedDiscovery);
+            try
+            {
+                Require(requests.SequenceEqual(new[] { false, true }));
+                Require(Descendants(window).OfType<ComboBox>().Count(combo =>
+                    combo.SelectedItem is string text && text.Contains("Isolated audio worker stopped unexpectedly.", StringComparison.Ordinal)) == 2);
+                Require(Find<Button>(window, "SaveSettings").IsEnabled);
+                Require(window.Result.Recording.SystemAudioDeviceId == "saved-output-id" &&
+                    window.Result.Recording.MicrophoneDeviceId == "saved-input-id");
+                Find<CheckBox>(window, nameof(RecordingSettings.UseFfmpeg)).SetCurrentValue(CheckBox.IsCheckedProperty, true);
+                Require(window.Result.Recording.UseFfmpeg && requests.Count == 2);
+                SetText(Find<TextBox>(window, nameof(RecordingSettings.FfmpegAudioDevice)), "Optional DirectShow input");
+                Require(window.Result.Recording.FfmpegAudioDevice == "Optional DirectShow input");
+                Require(window.Result.Recording.SystemAudioDeviceId == "saved-output-id" &&
+                    window.Result.Recording.MicrophoneDeviceId == "saved-input-id");
+                Require(!current.Recording.UseFfmpeg && current.Recording.SystemAudioDeviceId == "saved-output-id" &&
+                    current.Recording.MicrophoneDeviceId == "saved-input-id");
             }
             finally { window.Close(); }
         });
     }
 
     private static void Navigate(SettingsWindow window, string category) => Find<ListBox>(window, "SettingsCategories").SelectedItem = category;
+    private static ComboBox FindDevices(SettingsWindow window, string property)
+        => Descendants(window).OfType<ComboBox>().Single(combo =>
+            combo.GetBindingExpression(ComboBox.SelectedValueProperty)?.ParentBinding.Path.Path == property);
+    private static void SetDevice(ComboBox combo, string id)
+    {
+        combo.SetCurrentValue(ComboBox.SelectedValueProperty, id);
+        combo.GetBindingExpression(ComboBox.SelectedValueProperty)!.UpdateSource();
+    }
     private static void Save(SettingsWindow window) => Find<Button>(window, "SaveSettings").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
     private static void SetText(TextBox field, string value)
     {

@@ -16,6 +16,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (AudioDeviceChecks.IsFixture(args)) return AudioDeviceChecks.RunFixtureAsync(args).GetAwaiter().GetResult();
         if (RecoveryChecks.IsFixture(args)) return RecoveryChecks.RunFixtureAsync(args).GetAwaiter().GetResult();
         if (args.Contains("--without-ffmpeg"))
         {
@@ -214,6 +215,7 @@ internal static class Program
         var target = new CaptureTarget(CaptureKind.Region, new(0, 0, 640, 480));
         try
         {
+            await AudioDeviceChecks.RunAsync(directory, Check);
             await RecoveryChecks.RunAsync(directory, Check);
             await Check("pre-existing file is preserved", async () =>
             {

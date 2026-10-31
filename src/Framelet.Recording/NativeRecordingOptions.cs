@@ -63,16 +63,16 @@ internal static class NativeRecordingOptions
         if (settings.SystemAudio)
         {
             var device = string.IsNullOrWhiteSpace(settings.SystemAudioDeviceId)
-                ? NativeAudioDevices.GetOutputs().FirstOrDefault(d => d.IsDefault)
-                : NativeAudioDevices.GetOutputs().FirstOrDefault(d => d.Id == settings.SystemAudioDeviceId);
+                ? NativeAudioDeviceDiscovery.Enumerate(false).FirstOrDefault(d => d.IsDefault)
+                : NativeAudioDeviceDiscovery.Enumerate(false).FirstOrDefault(d => d.Id == settings.SystemAudioDeviceId);
             if (device is null) throw new InvalidOperationException("The selected system audio device is unavailable. Choose another output device or turn off system audio.");
             audio.Add(new LoopbackAudioSource(device.Id));
         }
         if (settings.Microphone)
         {
             var device = string.IsNullOrWhiteSpace(settings.MicrophoneDeviceId)
-                ? NativeAudioDevices.GetInputs().FirstOrDefault(d => d.IsDefault)
-                : NativeAudioDevices.GetInputs().FirstOrDefault(d => d.Id == settings.MicrophoneDeviceId);
+                ? NativeAudioDeviceDiscovery.Enumerate(true).FirstOrDefault(d => d.IsDefault)
+                : NativeAudioDeviceDiscovery.Enumerate(true).FirstOrDefault(d => d.Id == settings.MicrophoneDeviceId);
             if (device is null) throw new InvalidOperationException("The selected microphone is unavailable. Connect it, choose another microphone, or turn off microphone recording.");
             audio.Add(new CaptureAudioSource(device.Id));
         }

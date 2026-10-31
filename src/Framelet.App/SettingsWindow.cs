@@ -14,6 +14,7 @@ public sealed class SettingsWindow : Window
 {
     private readonly AppSettings draft;
     private readonly Action<AppSettings> apply;
+    private readonly Func<bool, IReadOnlyList<NativeAudioDevice>> listNativeAudioDevices;
     private readonly StackPanel page = new() { Margin = new Thickness(24, 20, 24, 20) };
     private readonly ListBox navigation = new() { Name = "SettingsCategories", Margin = new Thickness(10, 12, 10, 0) };
     private readonly TextBlock error = Ui.Text("", 12);
@@ -24,9 +25,11 @@ public sealed class SettingsWindow : Window
     private FrameworkElement? invalidField;
     public AppSettings Result => draft;
 
-    public SettingsWindow(AppSettings current, Action<AppSettings> apply, string initial = "General")
+    public SettingsWindow(AppSettings current, Action<AppSettings> apply, string initial = "General",
+        Func<bool, IReadOnlyList<NativeAudioDevice>>? listNativeAudioDevices = null)
     {
         this.apply = apply;
+        this.listNativeAudioDevices = listNativeAudioDevices ?? (microphone => microphone ? NativeAudioDevices.GetInputs() : NativeAudioDevices.GetOutputs());
         SetResourceReference(StyleProperty, typeof(Window));
         draft = SettingsStore.Clone(current);
         Title = "Framelet settings"; Width = 830; Height = 710; MinWidth = 740; MinHeight = 600; WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -161,7 +164,7 @@ public sealed class SettingsWindow : Window
     {
         try
         {
-            var items = (microphone ? NativeAudioDevices.GetInputs() : NativeAudioDevices.GetOutputs()).ToList();
+            var items = listNativeAudioDevices(microphone).ToList();
             items.Insert(0, new NativeAudioDevice("", "Windows default", true));
             var combo = new ComboBox { ItemsSource = items, DisplayMemberPath = "Name", SelectedValuePath = "Id" };
             combo.SetBinding(ComboBox.SelectedValueProperty, Ui.Bind(draft.Recording, microphone ? nameof(RecordingSettings.MicrophoneDeviceId) : nameof(RecordingSettings.SystemAudioDeviceId)));
